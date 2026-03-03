@@ -33,7 +33,7 @@ openreview version
 openreview plan
 ```
 
-Run sync:
+### Mode A: sync from prepared findings JSON
 
 ```bash
 openreview sync \
@@ -44,6 +44,17 @@ openreview sync \
 
 Without `--dry-run`, actions are applied to Azure DevOps.
 
+### Mode B: full pipeline run (diff -> AI review -> sync)
+
+```bash
+openreview run \
+  --pr-id 123 \
+  --repo-root . \
+  --dry-run
+```
+
+Without `--dry-run`, this command posts/updates/closes PR comments automatically.
+
 ## Azure DevOps configuration
 
 You can pass options explicitly, or use env vars:
@@ -52,6 +63,8 @@ You can pass options explicitly, or use env vars:
 - `AZDO_PROJECT`
 - `AZDO_REPO_ID`
 - `AZDO_PAT`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL` (optional, default in CLI)
 
 Example:
 
@@ -61,7 +74,7 @@ export AZDO_PROJECT=my-project
 export AZDO_REPO_ID=12345678-aaaa-bbbb-cccc-1234567890ab
 export AZDO_PAT=***
 
-openreview sync --pr-id 123 --findings-file findings.json
+openreview run --pr-id 123 --repo-root .
 ```
 
 ## Findings JSON format

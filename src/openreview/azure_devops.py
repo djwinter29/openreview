@@ -28,6 +28,38 @@ class AzureDevOpsClient:
             payload = res.json()
         return payload.get("value", [])
 
+    def get_pull_request_iterations(self, pr_id: int) -> list[dict[str, Any]]:
+        url = f"{self.base_url}/pullRequests/{pr_id}/iterations?api-version=7.1-preview.1"
+        with self._client() as client:
+            res = client.get(url)
+            res.raise_for_status()
+            payload = res.json()
+        return payload.get("value", [])
+
+    def get_iteration_changes(self, pr_id: int, iteration_id: int) -> list[dict[str, Any]]:
+        url = f"{self.base_url}/pullRequests/{pr_id}/iterations/{iteration_id}/changes?api-version=7.1-preview.1"
+        with self._client() as client:
+            res = client.get(url)
+            res.raise_for_status()
+            payload = res.json()
+        return payload.get("changeEntries", [])
+
+    def get_changed_files_latest_iteration(self, pr_id: int) -> list[str]:
+        iterations = self.get_pull_request_iterations(pr_id)
+        if not iterations:
+            return []
+        latest = max(iterations, key=lambda x: int(x.get("id", 0)))
+        changes = self.get_iteration_changes(pr_id, int(latest["id"]))
+
+        paths: list[str] = []
+        for c in changes:
+            item = c.get("item") or {}
+            path = item.get("path")
+            if isinstance(path, str) and path:
+                if path not in paths:
+                    paths.append(path)
+        return paths
+
     def create_thread(self, pr_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}/pullRequests/{pr_id}/threads?api-version=7.1-preview.1"
         with self._client() as client:

@@ -1,0 +1,35 @@
+trigger: none
+
+pr:
+  branches:
+    include:
+      - "*"
+
+pool:
+  vmImage: "ubuntu-latest"
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: "3.11"
+
+  - script: |
+      python -m pip install --upgrade pip
+      pip install openreview
+    displayName: Install openreview
+
+  - script: |
+      openreview run \
+        --pr-id "$(System.PullRequest.PullRequestId)" \
+        --repo-root "$(Build.SourcesDirectory)"
+    displayName: AI review and sync comments
+    env:
+      AZDO_ORG: $(AZDO_ORG)
+      AZDO_PROJECT: $(AZDO_PROJECT)
+      AZDO_REPO_ID: $(AZDO_REPO_ID)
+      AZDO_PAT: $(AZDO_PAT)
+      OPENAI_API_KEY: $(OPENAI_API_KEY)
+      OPENAI_MODEL: $(OPENAI_MODEL)
