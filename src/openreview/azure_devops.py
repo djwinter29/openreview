@@ -41,3 +41,11 @@ class AzureDevOpsClient:
             res = client.patch(url, json=payload)
             res.raise_for_status()
             return res.json()
+
+    def create_comment(self, pr_id: int, thread_id: int, content: str) -> dict[str, Any]:
+        url = f"{self.base_url}/pullRequests/{pr_id}/threads/{thread_id}/comments?api-version=7.1-preview.1"
+        payload = {"content": content, "commentType": 1, "parentCommentId": 0}
+        with self._client() as client:
+            res = client.post(url, json=payload)
+            res.raise_for_status()
+            return res.json()
