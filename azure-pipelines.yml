@@ -1,3 +1,8 @@
+# Azure DevOps sample pipeline for openreview
+#
+# This repo is developed on GitHub, while the runtime target is Azure DevOps PRs.
+# So this file is a ready-to-use template you can copy into Azure DevOps repos.
+
 trigger: none
 
 pr:
@@ -18,7 +23,12 @@ steps:
 
   - script: |
       python -m pip install --upgrade pip
-      pip install openreview
+      # Option A (recommended during active GitHub development):
+      pip install "git+https://github.com/djwinter29/openreview.git@main"
+      # For fully reproducible builds, pin a commit instead:
+      # pip install "git+https://github.com/djwinter29/openreview.git@<commit_sha>"
+      # After stable release on PyPI, switch to:
+      # pip install openreview
     displayName: Install openreview
 
   - script: |
