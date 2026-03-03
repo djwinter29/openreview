@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openreview"
+version = "0.1.0"
+description = "AI-assisted PR review with comment synchronization, focused on Azure DevOps"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "Ji Dong"}]
+license = {text = "MIT"}
+keywords = ["azure-devops", "pull-request", "review", "ai", "ci"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
+]
+dependencies = [
+  "httpx>=0.27",
+  "pydantic>=2.8",
+  "typer>=0.12",
+  "rich>=13.7"
+]
+
+[project.scripts]
+openreview = "openreview.cli:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

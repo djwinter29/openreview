@@ -1,0 +1,43 @@
+Metadata-Version: 2.4
+Name: openreview
+Version: 0.1.0
+Summary: AI-assisted PR review with comment synchronization, focused on Azure DevOps
+Author: Ji Dong
+License: MIT
+Keywords: azure-devops,pull-request,review,ai,ci
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: httpx>=0.27
+Requires-Dist: pydantic>=2.8
+Requires-Dist: typer>=0.12
+Requires-Dist: rich>=13.7
+Dynamic: license-file
+
+# openreview
+
+AI-assisted PR review automation focused on Azure DevOps.
+
+## Goals
+- Trigger on PR updates (new push/force-push)
+- Re-run review with LLM policy
+- Update existing review comments when code context changes
+- Auto-resolve stale comments; create new comments for new findings
+
+## Status
+Early scaffold (MVP in progress).
+
+## Planned MVP
+1. Fetch PR threads/comments from Azure DevOps
+2. Compute mapping from previous findings to current diff hunks
+3. Upsert review comments (new/update/resolve)
+4. Run in CI via GitHub Actions
+
+## Install (dev)
+```bash
+pip install -e .
+openreview --help
+```
