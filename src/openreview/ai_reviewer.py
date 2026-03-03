@@ -25,8 +25,8 @@ def _build_prompt(path: str, content: str) -> str:
         "You are a strict senior code reviewer. "
         "Return ONLY valid JSON array. "
         "Find practical issues in changed code only. "
-        "Schema per item: {line:int,severity:string,message:string}. "
-        "Severity must be one of: info, warning, error.\n\n"
+        "Schema per item: {line:int,severity:string,confidence:number,message:string,suggestion:string}. "
+        "Severity must be one of: info, warning, error. confidence in [0,1].\n\n"
         f"File: {path}\n"
         "Code:\n"
         f"```\n{content}\n```\n"
@@ -50,7 +50,6 @@ def _call_openai_json(api_key: str, model: str, prompt: str) -> list[dict]:
 
     text = data.get("output_text", "").strip()
     if not text:
-        # fallback: try digging from response output blocks
         out = data.get("output") or []
         parts: list[str] = []
         for item in out:
@@ -62,16 +61,13 @@ def _call_openai_json(api_key: str, model: str, prompt: str) -> list[dict]:
     if not text:
         return []
 
-    # tolerate fenced JSON
     if text.startswith("```"):
         text = text.strip("`")
         if text.lower().startswith("json"):
             text = text[4:].strip()
 
     parsed = json.loads(text)
-    if not isinstance(parsed, list):
-        return []
-    return parsed
+    return parsed if isinstance(parsed, list) else []
 
 
 def review_changed_files(
@@ -108,6 +104,13 @@ def review_changed_files(
             if severity not in {"info", "warning", "error"}:
                 severity = "warning"
             message = str(item.get("message", "Potential issue"))
+            suggestion = str(item.get("suggestion", "")).strip()
+            try:
+                confidence = float(item.get("confidence", 0.7))
+            except (TypeError, ValueError):
+                confidence = 0.7
+            confidence = max(0.0, min(1.0, confidence))
+
             findings.append(
                 ReviewFinding(
                     path=f"/{rel}",
@@ -115,6 +118,8 @@ def review_changed_files(
                     severity=severity,
                     message=message,
                     fingerprint=_fp(f"/{rel}", line, message),
+                    confidence=confidence,
+                    suggestion=suggestion,
                 )
             )
 

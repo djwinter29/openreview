@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 OPEN_STATUS = 1
 CLOSED_STATUS = 4
@@ -13,6 +13,9 @@ class ReviewFinding:
     severity: str
     message: str
     fingerprint: str
+    confidence: float = 0.7
+    suggestion: str = ""
+    meta: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -28,10 +31,14 @@ def marker_for_fingerprint(fingerprint: str) -> str:
 
 def comment_for_finding(finding: ReviewFinding) -> str:
     marker = marker_for_fingerprint(finding.fingerprint)
+    suggestion = finding.suggestion.strip() or "(No concrete fix suggested yet.)"
     return (
         f"{marker}\n"
-        f"[openreview][{finding.severity.upper()}] {finding.message}\n"
-        f"Location: `{finding.path}:{finding.line}`"
+        f"### [openreview] {finding.severity.upper()}\n"
+        f"**Issue**: {finding.message}\n\n"
+        f"**Location**: `{finding.path}:{finding.line}`\n"
+        f"**Confidence**: {finding.confidence:.2f}\n\n"
+        f"**Suggested fix**:\n{suggestion}"
     )
 
 
