@@ -108,3 +108,8 @@ python -m twine check dist/*
 ## License
 
 MIT
+
+
+## GitHub provider (WIP)
+- Added initial GitHub client for PR issue comments (create/update/list).
+- Next: wire provider switch in CLI and map sync actions to GitHub comments.
