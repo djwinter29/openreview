@@ -10,6 +10,7 @@ class OpenReviewRules(BaseModel):
     min_confidence: float = Field(default=0.6, ge=0.0, le=1.0)
     min_severity: str = Field(default="warning")  # info|warning|error
     max_comments: int = Field(default=30, ge=1)
+    max_comments_per_file: int = Field(default=5, ge=1)
     include_paths: list[str] = Field(default_factory=list)
     exclude_paths: list[str] = Field(default_factory=lambda: ["/tests/", "/docs/"])
     changed_lines_only: bool = True

@@ -15,8 +15,16 @@ class ChangedFile:
     path: str
 
 
+def _normalize_message(message: str) -> str:
+    text = " ".join(message.strip().lower().split())
+    # reduce churn from volatile numbers/ids in LLM phrasing
+    return "".join(ch for ch in text if ch.isalpha() or ch.isspace()).strip()
+
+
 def _fp(path: str, line: int, message: str) -> str:
-    raw = f"{path}|{line}|{message.strip().lower()}"
+    normalized = _normalize_message(message) or message.strip().lower()
+    # line is intentionally excluded for stable tracking across push line shifts
+    raw = f"{path}|{normalized}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 

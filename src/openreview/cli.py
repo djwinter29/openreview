@@ -103,6 +103,25 @@ def _apply_hunk_mapping(findings: list[ReviewFinding], hunks_by_file: dict[str, 
     return out
 
 
+def _cap_per_file(findings: list[ReviewFinding], max_comments_per_file: int) -> list[ReviewFinding]:
+    if max_comments_per_file <= 0:
+        return findings
+    counts: dict[str, int] = {}
+    out: list[ReviewFinding] = []
+    # higher severity/confidence first within each file
+    ranked = sorted(
+        findings,
+        key=lambda f: (f.path, -SEVERITY_RANK.get(f.severity, 2), -f.confidence, f.line),
+    )
+    for f in ranked:
+        used = counts.get(f.path, 0)
+        if used >= max_comments_per_file:
+            continue
+        counts[f.path] = used + 1
+        out.append(f)
+    return out
+
+
 @app.command()
 def sync(
     pr_id: int = typer.Option(..., help="Azure DevOps PR ID"),
@@ -188,6 +207,7 @@ def run(
     hunks = changed_hunks(repo_root, base_ref)
     findings = _apply_hunk_mapping(findings, hunks, cfg.rules.changed_lines_only)
     findings = _filter_findings(findings, cfg.rules.min_severity, cfg.rules.min_confidence)
+    findings = _cap_per_file(findings, cfg.rules.max_comments_per_file)
     findings = findings[: cfg.rules.max_comments]
     print(f"AI findings (filtered): {len(findings)}")
 
