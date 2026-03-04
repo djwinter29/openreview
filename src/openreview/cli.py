@@ -12,6 +12,8 @@ from openreview.ai_reviewer import ChangedFile, review_changed_files
 from openreview.azure_devops import AzureDevOpsClient
 from openreview.config import load_config
 from openreview.diff_mapper import changed_hunks, nearest_line_or_none
+from openreview.github_client import GitHubClient
+from openreview.github_sync import plan_github_sync
 from openreview.review_sync import ReviewFinding, plan_sync
 
 app = typer.Typer(help="openreview - AI-assisted PR review automation")
@@ -124,21 +126,52 @@ def _cap_per_file(findings: list[ReviewFinding], max_comments_per_file: int) -> 
 
 @app.command()
 def sync(
-    pr_id: int = typer.Option(..., help="Azure DevOps PR ID"),
+    pr_id: int = typer.Option(..., help="PR ID/number"),
     findings_file: Path = typer.Option(..., exists=True, help="Path to findings JSON"),
+    provider: str = typer.Option("azure", help="azure|github"),
     organization: str | None = typer.Option(None, help="Azure DevOps organization"),
     project: str | None = typer.Option(None, help="Azure DevOps project"),
     repository_id: str | None = typer.Option(None, help="Azure DevOps repository id"),
     pat: str | None = typer.Option(None, help="Azure DevOps PAT"),
+    github_owner: str | None = typer.Option(None, help="GitHub owner/org"),
+    github_repo: str | None = typer.Option(None, help="GitHub repository"),
+    github_token: str | None = typer.Option(None, help="GitHub token"),
     dry_run: bool = typer.Option(False, help="Only print planned actions"),
 ) -> None:
+    findings_raw = json.loads(findings_file.read_text())
+    findings = [ReviewFinding(**item) for item in findings_raw]
+
+    if provider == "github":
+        github_owner = _env_or_option(github_owner, "GITHUB_OWNER")
+        github_repo = _env_or_option(github_repo, "GITHUB_REPO")
+        github_token = _env_or_option(github_token, "GITHUB_TOKEN")
+
+        gh = GitHubClient(owner=github_owner, repo=github_repo, token=github_token)
+        existing_comments = gh.get_issue_comments(pr_id)
+        actions = plan_github_sync(findings, existing_comments)
+
+        print(f"Planned actions: {len(actions)}")
+        for action in actions:
+            print(f"- {action.kind} [{action.fingerprint}]")
+
+        if dry_run:
+            return
+
+        applied = 0
+        for action in actions:
+            if action.kind == "create_comment":
+                gh.create_issue_comment(pr_id, action.payload["body"])
+                applied += 1
+            else:
+                gh.update_issue_comment(action.payload["comment_id"], action.payload["body"])
+                applied += 1
+        print(f"Applied actions: {applied}")
+        return
+
     organization = _env_or_option(organization, "AZDO_ORG")
     project = _env_or_option(project, "AZDO_PROJECT")
     repository_id = _env_or_option(repository_id, "AZDO_REPO_ID")
     pat = _env_or_option(pat, "AZDO_PAT")
-
-    findings_raw = json.loads(findings_file.read_text())
-    findings = [ReviewFinding(**item) for item in findings_raw]
 
     client = AzureDevOpsClient(
         organization=organization,
@@ -146,6 +179,24 @@ def sync(
         repository_id=repository_id,
         pat=pat,
     )
+
+    if provider == "github":
+        existing_comments = gh.get_issue_comments(pr_id)
+        actions = plan_github_sync(findings, existing_comments)
+        print(f"Planned actions: {len(actions)}")
+        for action in actions:
+            print(f"- {action.kind} [{action.fingerprint}]")
+        if dry_run:
+            return
+        applied = 0
+        for action in actions:
+            if action.kind == "create_comment":
+                gh.create_issue_comment(pr_id, action.payload["body"])
+            else:
+                gh.update_issue_comment(action.payload["comment_id"], action.payload["body"])
+            applied += 1
+        print(f"Applied actions: {applied}")
+        return
 
     existing_threads = client.get_pull_request_threads(pr_id)
     actions = plan_sync(findings, existing_threads)
@@ -161,16 +212,21 @@ def sync(
     print(f"Applied actions: {applied}")
 
 
+
 @app.command()
 def run(
-    pr_id: int = typer.Option(..., help="Azure DevOps PR ID"),
+    pr_id: int = typer.Option(..., help="PR ID/number"),
     repo_root: Path = typer.Option(Path('.'), help="Checked-out repo root"),
     base_ref: str = typer.Option("origin/main", help="Base ref for hunk diff mapping"),
     config_file: Path = typer.Option(Path('.openreview.yml'), help="Path to .openreview.yml"),
+    provider: str = typer.Option("azure", help="azure|github"),
     organization: str | None = typer.Option(None, help="Azure DevOps organization"),
     project: str | None = typer.Option(None, help="Azure DevOps project"),
     repository_id: str | None = typer.Option(None, help="Azure DevOps repository id"),
     pat: str | None = typer.Option(None, help="Azure DevOps PAT"),
+    github_owner: str | None = typer.Option(None, help="GitHub owner/org"),
+    github_repo: str | None = typer.Option(None, help="GitHub repository"),
+    github_token: str | None = typer.Option(None, help="GitHub token"),
     openai_api_key: str | None = typer.Option(None, help="OpenAI API key"),
     openai_model: str = typer.Option("gpt-4.1-mini", help="OpenAI model"),
     max_files: int = typer.Option(25, help="Max changed files to review"),
@@ -178,20 +234,32 @@ def run(
 ) -> None:
     cfg = load_config(config_file)
 
-    organization = _env_or_option(organization, "AZDO_ORG")
-    project = _env_or_option(project, "AZDO_PROJECT")
-    repository_id = _env_or_option(repository_id, "AZDO_REPO_ID")
-    pat = _env_or_option(pat, "AZDO_PAT")
     openai_api_key = _env_or_option(openai_api_key, "OPENAI_API_KEY")
 
-    client = AzureDevOpsClient(
-        organization=organization,
-        project=project,
-        repository_id=repository_id,
-        pat=pat,
-    )
-
-    changed_paths = client.get_changed_files_latest_iteration(pr_id)
+    if provider == "github":
+        github_owner = _env_or_option(github_owner, "GITHUB_OWNER")
+        github_repo = _env_or_option(github_repo, "GITHUB_REPO")
+        github_token = _env_or_option(github_token, "GITHUB_TOKEN")
+        gh = GitHubClient(owner=github_owner, repo=github_repo, token=github_token)
+        # for MVP, use local git diff as changed source in github mode
+        changed_paths = [p.path for p in [ChangedFile(path=x) for x in []]]
+        import subprocess
+        diff_out = subprocess.check_output([
+            "git", "-C", str(repo_root), "diff", "--name-only", f"{base_ref}...HEAD"
+        ], text=True)
+        changed_paths = ["/" + p.strip() for p in diff_out.splitlines() if p.strip()]
+    else:
+        organization = _env_or_option(organization, "AZDO_ORG")
+        project = _env_or_option(project, "AZDO_PROJECT")
+        repository_id = _env_or_option(repository_id, "AZDO_REPO_ID")
+        pat = _env_or_option(pat, "AZDO_PAT")
+        client = AzureDevOpsClient(
+            organization=organization,
+            project=project,
+            repository_id=repository_id,
+            pat=pat,
+        )
+        changed_paths = client.get_changed_files_latest_iteration(pr_id)
     changed_paths = [p for p in changed_paths if _path_allowed(p, cfg.rules.include_paths, cfg.rules.exclude_paths)]
     files = [ChangedFile(path=p) for p in changed_paths[:max_files]]
     print(f"Changed files considered: {len(files)}")
@@ -210,6 +278,24 @@ def run(
     findings = _cap_per_file(findings, cfg.rules.max_comments_per_file)
     findings = findings[: cfg.rules.max_comments]
     print(f"AI findings (filtered): {len(findings)}")
+
+    if provider == "github":
+        existing_comments = gh.get_issue_comments(pr_id)
+        actions = plan_github_sync(findings, existing_comments)
+        print(f"Planned actions: {len(actions)}")
+        for action in actions:
+            print(f"- {action.kind} [{action.fingerprint}]")
+        if dry_run:
+            return
+        applied = 0
+        for action in actions:
+            if action.kind == "create_comment":
+                gh.create_issue_comment(pr_id, action.payload["body"])
+            else:
+                gh.update_issue_comment(action.payload["comment_id"], action.payload["body"])
+            applied += 1
+        print(f"Applied actions: {applied}")
+        return
 
     existing_threads = client.get_pull_request_threads(pr_id)
     actions = plan_sync(findings, existing_threads)
