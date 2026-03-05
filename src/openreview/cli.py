@@ -14,6 +14,8 @@ from openreview.config import load_config
 from openreview.diff_mapper import changed_hunks, nearest_line_or_none
 from openreview.github_client import GitHubClient
 from openreview.github_sync import build_summary_comment, find_existing_summary_comment, plan_github_sync
+from openreview.gitlab_client import GitLabClient
+from openreview.gitlab_sync import build_summary_note, find_existing_summary_note, plan_gitlab_sync
 from openreview.review_sync import ReviewFinding, build_summary_content, find_summary_thread, plan_sync
 
 app = typer.Typer(help="openreview - AI-assisted PR review automation")
@@ -128,7 +130,7 @@ def _cap_per_file(findings: list[ReviewFinding], max_comments_per_file: int) -> 
 def sync(
     pr_id: int = typer.Option(..., help="PR ID/number"),
     findings_file: Path = typer.Option(..., exists=True, help="Path to findings JSON"),
-    provider: str = typer.Option("azure", help="azure|github"),
+    provider: str = typer.Option("azure", help="azure|github|gitlab"),
     organization: str | None = typer.Option(None, help="Azure DevOps organization"),
     project: str | None = typer.Option(None, help="Azure DevOps project"),
     repository_id: str | None = typer.Option(None, help="Azure DevOps repository id"),
@@ -136,12 +138,63 @@ def sync(
     github_owner: str | None = typer.Option(None, help="GitHub owner/org"),
     github_repo: str | None = typer.Option(None, help="GitHub repository"),
     github_token: str | None = typer.Option(None, help="GitHub token"),
+    gitlab_project_id: str | None = typer.Option(None, help="GitLab project id (url-encoded path or numeric id)"),
+    gitlab_token: str | None = typer.Option(None, help="GitLab token"),
+    gitlab_base_url: str = typer.Option("https://gitlab.com/api/v4", help="GitLab API base URL"),
     dry_run: bool = typer.Option(False, help="Only print planned actions"),
 ) -> None:
     findings_raw = json.loads(findings_file.read_text())
     findings = [ReviewFinding(**item) for item in findings_raw]
 
-    if provider == "github":
+    if provider == "gitlab":
+        gitlab_project_id = _env_or_option(gitlab_project_id, "GITLAB_PROJECT_ID")
+        gitlab_token = _env_or_option(gitlab_token, "GITLAB_TOKEN")
+        gl = GitLabClient(project_id=gitlab_project_id, token=gitlab_token, base_url=gitlab_base_url)
+
+        existing_notes = gl.get_mr_notes(pr_id)
+        actions = plan_gitlab_sync(findings, existing_notes)
+
+        print(f"Planned actions: {len(actions)}")
+        for action in actions:
+            print(f"- {action.kind} [{action.fingerprint}]")
+
+        if dry_run:
+            return
+
+        applied = 0
+        created = updated = closed = 0
+        for action in actions:
+            if action.kind == "create_note":
+                gl.create_mr_note(pr_id, action.payload["body"])
+                created += 1
+            else:
+                gl.update_mr_note(pr_id, action.payload["note_id"], action.payload["body"])
+                if action.kind == "close_note":
+                    closed += 1
+                else:
+                    updated += 1
+            applied += 1
+
+        summary = build_summary_note(created=created, updated=updated, closed=closed, total_findings=len(findings))
+        summary_existing = find_existing_summary_note(gl.get_mr_notes(pr_id))
+        if summary_existing:
+            gl.update_mr_note(pr_id, summary_existing["id"], summary)
+        else:
+            gl.create_mr_note(pr_id, summary)
+
+        print(f"Applied actions: {applied}")
+        return
+
+    if provider == "gitlab":
+        gitlab_project_id = _env_or_option(gitlab_project_id, "GITLAB_PROJECT_ID")
+        gitlab_token = _env_or_option(gitlab_token, "GITLAB_TOKEN")
+        gl = GitLabClient(project_id=gitlab_project_id, token=gitlab_token, base_url=gitlab_base_url)
+        import subprocess
+        diff_out = subprocess.check_output([
+            "git", "-C", str(repo_root), "diff", "--name-only", f"{base_ref}...HEAD"
+        ], text=True)
+        changed_paths = ["/" + p.strip() for p in diff_out.splitlines() if p.strip()]
+    elif provider == "github":
         github_owner = _env_or_option(github_owner, "GITHUB_OWNER")
         github_repo = _env_or_option(github_repo, "GITHUB_REPO")
         github_token = _env_or_option(github_token, "GITHUB_TOKEN")
@@ -245,7 +298,7 @@ def run(
     repo_root: Path = typer.Option(Path('.'), help="Checked-out repo root"),
     base_ref: str = typer.Option("origin/main", help="Base ref for hunk diff mapping"),
     config_file: Path = typer.Option(Path('.openreview.yml'), help="Path to .openreview.yml"),
-    provider: str = typer.Option("azure", help="azure|github"),
+    provider: str = typer.Option("azure", help="azure|github|gitlab"),
     organization: str | None = typer.Option(None, help="Azure DevOps organization"),
     project: str | None = typer.Option(None, help="Azure DevOps project"),
     repository_id: str | None = typer.Option(None, help="Azure DevOps repository id"),
@@ -253,6 +306,9 @@ def run(
     github_owner: str | None = typer.Option(None, help="GitHub owner/org"),
     github_repo: str | None = typer.Option(None, help="GitHub repository"),
     github_token: str | None = typer.Option(None, help="GitHub token"),
+    gitlab_project_id: str | None = typer.Option(None, help="GitLab project id (url-encoded path or numeric id)"),
+    gitlab_token: str | None = typer.Option(None, help="GitLab token"),
+    gitlab_base_url: str = typer.Option("https://gitlab.com/api/v4", help="GitLab API base URL"),
     openai_api_key: str | None = typer.Option(None, help="OpenAI API key"),
     openai_model: str = typer.Option("gpt-4.1-mini", help="OpenAI model"),
     max_files: int = typer.Option(25, help="Max changed files to review"),
@@ -303,6 +359,38 @@ def run(
     findings = _cap_per_file(findings, cfg.rules.max_comments_per_file)
     findings = findings[: cfg.rules.max_comments]
     print(f"AI findings (filtered): {len(findings)}")
+
+    if provider == "gitlab":
+        existing_notes = gl.get_mr_notes(pr_id)
+        actions = plan_gitlab_sync(findings, existing_notes)
+        print(f"Planned actions: {len(actions)}")
+        for action in actions:
+            print(f"- {action.kind} [{action.fingerprint}]")
+        if dry_run:
+            return
+        applied = 0
+        created = updated = closed = 0
+        for action in actions:
+            if action.kind == "create_note":
+                gl.create_mr_note(pr_id, action.payload["body"])
+                created += 1
+            else:
+                gl.update_mr_note(pr_id, action.payload["note_id"], action.payload["body"])
+                if action.kind == "close_note":
+                    closed += 1
+                else:
+                    updated += 1
+            applied += 1
+
+        summary = build_summary_note(created=created, updated=updated, closed=closed, total_findings=len(findings))
+        summary_existing = find_existing_summary_note(gl.get_mr_notes(pr_id))
+        if summary_existing:
+            gl.update_mr_note(pr_id, summary_existing["id"], summary)
+        else:
+            gl.create_mr_note(pr_id, summary)
+
+        print(f"Applied actions: {applied}")
+        return
 
     if provider == "github":
         existing_comments = gh.get_review_comments(pr_id) + gh.get_issue_comments(pr_id)
