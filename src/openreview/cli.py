@@ -180,24 +180,6 @@ def sync(
         pat=pat,
     )
 
-    if provider == "github":
-        existing_comments = gh.get_issue_comments(pr_id)
-        actions = plan_github_sync(findings, existing_comments)
-        print(f"Planned actions: {len(actions)}")
-        for action in actions:
-            print(f"- {action.kind} [{action.fingerprint}]")
-        if dry_run:
-            return
-        applied = 0
-        for action in actions:
-            if action.kind == "create_comment":
-                gh.create_issue_comment(pr_id, action.payload["body"])
-            else:
-                gh.update_issue_comment(action.payload["comment_id"], action.payload["body"])
-            applied += 1
-        print(f"Applied actions: {applied}")
-        return
-
     existing_threads = client.get_pull_request_threads(pr_id)
     actions = plan_sync(findings, existing_threads)
 
@@ -242,7 +224,6 @@ def run(
         github_token = _env_or_option(github_token, "GITHUB_TOKEN")
         gh = GitHubClient(owner=github_owner, repo=github_repo, token=github_token)
         # for MVP, use local git diff as changed source in github mode
-        changed_paths = [p.path for p in [ChangedFile(path=x) for x in []]]
         import subprocess
         diff_out = subprocess.check_output([
             "git", "-C", str(repo_root), "diff", "--name-only", f"{base_ref}...HEAD"
