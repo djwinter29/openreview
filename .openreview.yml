@@ -2,6 +2,7 @@ rules:
   min_confidence: 0.65
   min_severity: warning
   max_comments: 25
+  max_comments_per_file: 3
   include_paths: []
   exclude_paths:
     - /tests/
