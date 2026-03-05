@@ -13,7 +13,7 @@ from openreview.azure_devops import AzureDevOpsClient
 from openreview.config import load_config
 from openreview.diff_mapper import changed_hunks, nearest_line_or_none
 from openreview.github_client import GitHubClient
-from openreview.github_sync import plan_github_sync
+from openreview.github_sync import build_summary_comment, find_existing_summary_comment, plan_github_sync
 from openreview.review_sync import ReviewFinding, plan_sync
 
 app = typer.Typer(help="openreview - AI-assisted PR review automation")
@@ -147,7 +147,7 @@ def sync(
         github_token = _env_or_option(github_token, "GITHUB_TOKEN")
 
         gh = GitHubClient(owner=github_owner, repo=github_repo, token=github_token)
-        existing_comments = gh.get_issue_comments(pr_id)
+        existing_comments = gh.get_review_comments(pr_id) + gh.get_issue_comments(pr_id)
         actions = plan_github_sync(findings, existing_comments)
 
         print(f"Planned actions: {len(actions)}")
@@ -158,6 +158,7 @@ def sync(
             return
 
         applied = 0
+        created = updated = closed = 0
         pr = gh.get_pull_request(pr_id)
         head_sha = ((pr.get("head") or {}).get("sha"))
         for action in actions:
@@ -173,10 +174,26 @@ def sync(
                 except Exception:
                     # fallback to issue comments when line-level placement fails
                     gh.create_issue_comment(pr_id, action.payload["body"])
+                created += 1
                 applied += 1
-            else:
-                gh.update_review_comment(action.payload["comment_id"], action.payload["body"])
+            elif action.kind in {"update_review_comment", "close_review_comment"}:
+                try:
+                    gh.update_review_comment(action.payload["comment_id"], action.payload["body"])
+                except Exception:
+                    gh.update_issue_comment(action.payload["comment_id"], action.payload["body"])
+                if action.kind == "close_review_comment":
+                    closed += 1
+                else:
+                    updated += 1
                 applied += 1
+
+        summary = build_summary_comment(created=created, updated=updated, closed=closed, total_findings=len(findings))
+        summary_existing = find_existing_summary_comment(gh.get_issue_comments(pr_id))
+        if summary_existing:
+            gh.update_issue_comment(summary_existing["id"], summary)
+        else:
+            gh.create_issue_comment(pr_id, summary)
+
         print(f"Applied actions: {applied}")
         return
 
@@ -273,7 +290,7 @@ def run(
     print(f"AI findings (filtered): {len(findings)}")
 
     if provider == "github":
-        existing_comments = gh.get_issue_comments(pr_id)
+        existing_comments = gh.get_review_comments(pr_id) + gh.get_issue_comments(pr_id)
         actions = plan_github_sync(findings, existing_comments)
         print(f"Planned actions: {len(actions)}")
         for action in actions:
@@ -281,6 +298,7 @@ def run(
         if dry_run:
             return
         applied = 0
+        created = updated = closed = 0
         pr = gh.get_pull_request(pr_id)
         head_sha = ((pr.get("head") or {}).get("sha"))
         for action in actions:
@@ -295,9 +313,25 @@ def run(
                     )
                 except Exception:
                     gh.create_issue_comment(pr_id, action.payload["body"])
-            else:
-                gh.update_review_comment(action.payload["comment_id"], action.payload["body"])
+                created += 1
+            elif action.kind in {"update_review_comment", "close_review_comment"}:
+                try:
+                    gh.update_review_comment(action.payload["comment_id"], action.payload["body"])
+                except Exception:
+                    gh.update_issue_comment(action.payload["comment_id"], action.payload["body"])
+                if action.kind == "close_review_comment":
+                    closed += 1
+                else:
+                    updated += 1
             applied += 1
+
+        summary = build_summary_comment(created=created, updated=updated, closed=closed, total_findings=len(findings))
+        summary_existing = find_existing_summary_comment(gh.get_issue_comments(pr_id))
+        if summary_existing:
+            gh.update_issue_comment(summary_existing["id"], summary)
+        else:
+            gh.create_issue_comment(pr_id, summary)
+
         print(f"Applied actions: {applied}")
         return
 

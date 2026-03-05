@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from openreview.review_sync import ReviewFinding, comment_for_finding
 
 CLOSED_MARKER = "<!-- openreview:status=closed -->"
+SUMMARY_MARKER = "<!-- openreview:summary -->"
 
 
 @dataclass
@@ -94,3 +95,21 @@ def plan_github_sync(findings: list[ReviewFinding], existing_comments: list[dict
         )
 
     return actions
+
+
+def build_summary_comment(*, created: int, updated: int, closed: int, total_findings: int) -> str:
+    return (
+        f"{SUMMARY_MARKER}\n"
+        f"### openreview summary\n"
+        f"- findings considered: {total_findings}\n"
+        f"- comments created: {created}\n"
+        f"- comments updated: {updated}\n"
+        f"- comments closed: {closed}"
+    )
+
+
+def find_existing_summary_comment(comments: list[dict]) -> dict | None:
+    for c in comments:
+        if SUMMARY_MARKER in (c.get("body") or ""):
+            return c
+    return None
