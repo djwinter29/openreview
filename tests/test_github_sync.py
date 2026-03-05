@@ -1,4 +1,4 @@
-from openreview.github_sync import plan_github_sync
+from openreview.providers.github.sync import plan_github_sync
 from openreview.review_sync import ReviewFinding
 
 

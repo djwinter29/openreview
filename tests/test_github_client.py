@@ -1,4 +1,4 @@
-from openreview.github_client import GitHubClient
+from openreview.providers.github.client import GitHubClient
 
 
 class FakeResponse:

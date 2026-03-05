@@ -1,4 +1,4 @@
-from openreview.azure_devops import AzureDevOpsClient
+from openreview.providers.azure.client import AzureDevOpsClient
 
 
 class FakeResponse:
