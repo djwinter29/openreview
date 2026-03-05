@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 OPEN_STATUS = 1
 CLOSED_STATUS = 4
+SUMMARY_MARKER = "<!-- openreview:summary -->"
 
 
 @dataclass
@@ -128,3 +129,22 @@ def plan_sync(findings: list[ReviewFinding], existing_threads: list[dict]) -> li
             )
 
     return actions
+
+
+def build_summary_content(*, created: int, updated: int, closed: int, total_findings: int) -> str:
+    return (
+        f"{SUMMARY_MARKER}\n"
+        f"### openreview summary\n"
+        f"- findings considered: {total_findings}\n"
+        f"- comments created: {created}\n"
+        f"- comments updated: {updated}\n"
+        f"- comments closed: {closed}"
+    )
+
+
+def find_summary_thread(threads: list[dict]) -> dict | None:
+    for t in threads:
+        for c in (t.get("comments") or []):
+            if SUMMARY_MARKER in (c.get("content") or ""):
+                return t
+    return None

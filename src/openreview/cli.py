@@ -14,7 +14,7 @@ from openreview.config import load_config
 from openreview.diff_mapper import changed_hunks, nearest_line_or_none
 from openreview.github_client import GitHubClient
 from openreview.github_sync import build_summary_comment, find_existing_summary_comment, plan_github_sync
-from openreview.review_sync import ReviewFinding, plan_sync
+from openreview.review_sync import ReviewFinding, build_summary_content, find_summary_thread, plan_sync
 
 app = typer.Typer(help="openreview - AI-assisted PR review automation")
 
@@ -220,6 +220,21 @@ def sync(
         return
 
     applied = _apply_actions(client, pr_id, actions)
+    created = sum(1 for a in actions if a.kind == "create_thread")
+    updated = sum(1 for a in actions if a.kind in {"add_comment", "reopen_thread"})
+    closed = sum(1 for a in actions if a.kind == "close_thread")
+    summary = build_summary_content(created=created, updated=updated, closed=closed, total_findings=len(findings))
+    summary_thread = find_summary_thread(client.get_pull_request_threads(pr_id))
+    if summary_thread:
+        client.create_comment(pr_id, summary_thread["id"], summary)
+    else:
+        client.create_thread(
+            pr_id,
+            {
+                "comments": [{"parentCommentId": 0, "content": summary, "commentType": 1}],
+                "status": 1,
+            },
+        )
     print(f"Applied actions: {applied}")
 
 
@@ -346,6 +361,21 @@ def run(
         return
 
     applied = _apply_actions(client, pr_id, actions)
+    created = sum(1 for a in actions if a.kind == "create_thread")
+    updated = sum(1 for a in actions if a.kind in {"add_comment", "reopen_thread"})
+    closed = sum(1 for a in actions if a.kind == "close_thread")
+    summary = build_summary_content(created=created, updated=updated, closed=closed, total_findings=len(findings))
+    summary_thread = find_summary_thread(client.get_pull_request_threads(pr_id))
+    if summary_thread:
+        client.create_comment(pr_id, summary_thread["id"], summary)
+    else:
+        client.create_thread(
+            pr_id,
+            {
+                "comments": [{"parentCommentId": 0, "content": summary, "commentType": 1}],
+                "status": 1,
+            },
+        )
     print(f"Applied actions: {applied}")
 
 
