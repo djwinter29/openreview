@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from openreview.review_sync import ReviewFinding, comment_for_finding, marker_for_fingerprint
+from openreview.review_sync import ReviewFinding, comment_for_finding
 
 CLOSED_MARKER = "<!-- openreview:status=closed -->"
 
@@ -35,6 +35,10 @@ def close_body(old_body: str) -> str:
     return f"{old_body}\n\n{CLOSED_MARKER}\nResolved in latest revision."
 
 
+def _path_for_github(path: str) -> str:
+    return path.lstrip("/")
+
+
 def plan_github_sync(findings: list[ReviewFinding], existing_comments: list[dict]) -> list[GitHubAction]:
     actions: list[GitHubAction] = []
     existing_by_fp: dict[str, dict] = {}
@@ -52,14 +56,24 @@ def plan_github_sync(findings: list[ReviewFinding], existing_comments: list[dict
         desired = comment_for_finding(finding)
 
         if not existing:
-            actions.append(GitHubAction(kind="create_comment", fingerprint=fp, payload={"body": desired}))
+            actions.append(
+                GitHubAction(
+                    kind="create_review_comment",
+                    fingerprint=fp,
+                    payload={
+                        "body": desired,
+                        "path": _path_for_github(finding.path),
+                        "line": finding.line,
+                    },
+                )
+            )
             continue
 
         current = (existing.get("body") or "").strip()
         if is_closed_comment(current) or current != desired.strip():
             actions.append(
                 GitHubAction(
-                    kind="update_comment",
+                    kind="update_review_comment",
                     fingerprint=fp,
                     payload={"comment_id": existing["id"], "body": desired},
                 )
@@ -73,7 +87,7 @@ def plan_github_sync(findings: list[ReviewFinding], existing_comments: list[dict
             continue
         actions.append(
             GitHubAction(
-                kind="close_comment",
+                kind="close_review_comment",
                 fingerprint=fp,
                 payload={"comment_id": c["id"], "body": close_body(body)},
             )

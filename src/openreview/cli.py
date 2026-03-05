@@ -158,12 +158,24 @@ def sync(
             return
 
         applied = 0
+        pr = gh.get_pull_request(pr_id)
+        head_sha = ((pr.get("head") or {}).get("sha"))
         for action in actions:
-            if action.kind == "create_comment":
-                gh.create_issue_comment(pr_id, action.payload["body"])
+            if action.kind == "create_review_comment":
+                try:
+                    gh.create_review_comment(
+                        pr_number=pr_id,
+                        body=action.payload["body"],
+                        commit_id=head_sha,
+                        path=action.payload["path"],
+                        line=action.payload["line"],
+                    )
+                except Exception:
+                    # fallback to issue comments when line-level placement fails
+                    gh.create_issue_comment(pr_id, action.payload["body"])
                 applied += 1
             else:
-                gh.update_issue_comment(action.payload["comment_id"], action.payload["body"])
+                gh.update_review_comment(action.payload["comment_id"], action.payload["body"])
                 applied += 1
         print(f"Applied actions: {applied}")
         return
@@ -269,11 +281,22 @@ def run(
         if dry_run:
             return
         applied = 0
+        pr = gh.get_pull_request(pr_id)
+        head_sha = ((pr.get("head") or {}).get("sha"))
         for action in actions:
-            if action.kind == "create_comment":
-                gh.create_issue_comment(pr_id, action.payload["body"])
+            if action.kind == "create_review_comment":
+                try:
+                    gh.create_review_comment(
+                        pr_number=pr_id,
+                        body=action.payload["body"],
+                        commit_id=head_sha,
+                        path=action.payload["path"],
+                        line=action.payload["line"],
+                    )
+                except Exception:
+                    gh.create_issue_comment(pr_id, action.payload["body"])
             else:
-                gh.update_issue_comment(action.payload["comment_id"], action.payload["body"])
+                gh.update_review_comment(action.payload["comment_id"], action.payload["body"])
             applied += 1
         print(f"Applied actions: {applied}")
         return

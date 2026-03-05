@@ -26,8 +26,8 @@ class GitHubClient:
             timeout=30.0,
         )
 
+    # ---- issue comments (fallback + summary style) ----
     def get_issue_comments(self, pr_number: int) -> list[dict[str, Any]]:
-        # PR comments are issue comments + review comments; MVP starts with issue comments
         url = f"{self.base_url}/issues/{pr_number}/comments"
         with self._client() as c:
             r = c.get(url)
@@ -43,6 +43,51 @@ class GitHubClient:
 
     def update_issue_comment(self, comment_id: int, body: str) -> dict[str, Any]:
         url = f"https://api.github.com/repos/{self.owner}/{self.repo}/issues/comments/{comment_id}"
+        with self._client() as c:
+            r = c.patch(url, json={"body": body})
+            r.raise_for_status()
+            return r.json()
+
+    # ---- review comments (line-level) ----
+    def get_pull_request(self, pr_number: int) -> dict[str, Any]:
+        url = f"{self.base_url}/pulls/{pr_number}"
+        with self._client() as c:
+            r = c.get(url)
+            r.raise_for_status()
+            return r.json()
+
+    def get_review_comments(self, pr_number: int) -> list[dict[str, Any]]:
+        url = f"{self.base_url}/pulls/{pr_number}/comments"
+        with self._client() as c:
+            r = c.get(url)
+            r.raise_for_status()
+            return r.json()
+
+    def create_review_comment(
+        self,
+        *,
+        pr_number: int,
+        body: str,
+        commit_id: str,
+        path: str,
+        line: int,
+        side: str = "RIGHT",
+    ) -> dict[str, Any]:
+        url = f"{self.base_url}/pulls/{pr_number}/comments"
+        payload = {
+            "body": body,
+            "commit_id": commit_id,
+            "path": path,
+            "line": line,
+            "side": side,
+        }
+        with self._client() as c:
+            r = c.post(url, json=payload)
+            r.raise_for_status()
+            return r.json()
+
+    def update_review_comment(self, comment_id: int, body: str) -> dict[str, Any]:
+        url = f"{self.base_url}/pulls/comments/{comment_id}"
         with self._client() as c:
             r = c.patch(url, json={"body": body})
             r.raise_for_status()
