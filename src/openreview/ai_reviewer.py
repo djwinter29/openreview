@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 
-from openreview.review_sync import ReviewFinding
+from openreview.sync_core import ReviewFinding
 
 
 @dataclass

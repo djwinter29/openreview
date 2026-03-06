@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, Any
 
-from openreview.review_sync import ReviewFinding
+from openreview.sync_core import ReviewFinding
 
 
 @dataclass

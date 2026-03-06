@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from openreview.review_sync import ReviewFinding, comment_for_finding
+from openreview.sync_core import ReviewFinding, comment_for_finding
 
 CLOSED_MARKER = "<!-- openreview:status=closed -->"
 SUMMARY_MARKER = "<!-- openreview:summary -->"
