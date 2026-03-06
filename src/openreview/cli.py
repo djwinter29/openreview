@@ -16,7 +16,7 @@ from openreview.providers.github.client import GitHubClient
 from openreview.providers.github.sync import build_summary_comment, find_existing_summary_comment, plan_github_sync
 from openreview.providers.gitlab.client import GitLabClient
 from openreview.providers.gitlab.sync import build_summary_note, find_existing_summary_note, plan_gitlab_sync
-from openreview.review_sync import ReviewFinding, build_summary_content, find_summary_thread, plan_sync
+from openreview.sync_core import ReviewFinding, build_summary_content, find_summary_thread, plan_sync
 
 app = typer.Typer(help="openreview - AI-assisted PR review automation")
 

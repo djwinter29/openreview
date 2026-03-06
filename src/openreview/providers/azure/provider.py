@@ -5,7 +5,11 @@ from typing import Any
 
 from openreview.providers.azure.client import AzureDevOpsClient
 from openreview.providers.base import SyncSummary
-from openreview.review_sync import build_summary_content, find_summary_thread, plan_sync
+from openreview.providers.azure.sync import (
+    build_azure_summary,
+    find_azure_summary_thread,
+    plan_azure_sync,
+)
 
 
 @dataclass
@@ -16,7 +20,7 @@ class AzureProvider:
         return self.client.get_pull_request_threads(pr_id)
 
     def plan(self, findings, existing):
-        return plan_sync(findings, existing)
+        return plan_azure_sync(findings, existing)
 
     def apply(self, pr_id: int, actions: list[Any], *, dry_run: bool = False) -> SyncSummary:
         created = sum(1 for a in actions if a.kind == "create_thread")
@@ -35,14 +39,14 @@ class AzureProvider:
                 self.client.create_comment(pr_id, action.payload["threadId"], action.payload["content"])
             applied += 1
 
-        summary = build_summary_content(
+        summary = build_azure_summary(
             created=created,
             updated=updated,
             closed=closed,
             total_findings=created + updated,
         )
         existing = self.client.get_pull_request_threads(pr_id)
-        thread = find_summary_thread(existing)
+        thread = find_azure_summary_thread(existing)
         if thread:
             self.client.create_comment(pr_id, thread["id"], summary)
         else:

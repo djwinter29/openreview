@@ -1,5 +1,5 @@
 from openreview.providers.gitlab.sync import plan_gitlab_sync, find_existing_summary_note, build_summary_note
-from openreview.review_sync import ReviewFinding
+from openreview.sync_core import ReviewFinding
 
 
 def rf(fp: str, msg: str = "m") -> ReviewFinding:

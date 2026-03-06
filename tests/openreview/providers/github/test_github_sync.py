@@ -1,5 +1,5 @@
 from openreview.providers.github.sync import plan_github_sync
-from openreview.review_sync import ReviewFinding
+from openreview.sync_core import ReviewFinding
 
 
 def rf(fp: str, msg: str = "m") -> ReviewFinding:
