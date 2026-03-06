@@ -9,13 +9,13 @@ from rich import print
 
 from openreview import __version__
 from openreview.ai_reviewer import ChangedFile, review_changed_files
-from openreview.azure_devops import AzureDevOpsClient
+from openreview.providers.azure.client import AzureDevOpsClient
 from openreview.config import load_config
 from openreview.diff_mapper import changed_hunks, nearest_line_or_none
-from openreview.github_client import GitHubClient
-from openreview.github_sync import build_summary_comment, find_existing_summary_comment, plan_github_sync
-from openreview.gitlab_client import GitLabClient
-from openreview.gitlab_sync import build_summary_note, find_existing_summary_note, plan_gitlab_sync
+from openreview.providers.github.client import GitHubClient
+from openreview.providers.github.sync import build_summary_comment, find_existing_summary_comment, plan_github_sync
+from openreview.providers.gitlab.client import GitLabClient
+from openreview.providers.gitlab.sync import build_summary_note, find_existing_summary_note, plan_gitlab_sync
 from openreview.review_sync import ReviewFinding, build_summary_content, find_summary_thread, plan_sync
 
 app = typer.Typer(help="openreview - AI-assisted PR review automation")

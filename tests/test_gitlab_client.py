@@ -1,4 +1,4 @@
-from openreview.gitlab_client import GitLabClient
+from openreview.providers.gitlab.client import GitLabClient
 
 
 class FakeResponse:
