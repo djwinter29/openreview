@@ -101,6 +101,11 @@ You can pass options explicitly, or use env vars:
 - `GITHUB_REPO`
 - `GITHUB_TOKEN`
 
+### GitLab
+- `GITLAB_PROJECT_ID`
+- `GITLAB_TOKEN`
+- `GITLAB_BASE_URL` (optional, default: `https://gitlab.com/api/v4`)
+
 ### AI
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (optional, default in CLI)
