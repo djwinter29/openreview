@@ -12,10 +12,8 @@ from openreview import __version__
 from openreview.ai_reviewer import ChangedFile, review_changed_files
 from openreview.config import load_config
 from openreview.diff_mapper import changed_hunks, nearest_line_or_none
-from openreview.providers.azure import AzureDevOpsClient, AzureProvider
-from openreview.providers.base import ReviewProvider
-from openreview.providers.github import GitHubClient, GitHubProvider
-from openreview.providers.gitlab import GitLabClient, GitLabProvider
+from openreview.providers.azure import AzureDevOpsClient
+from openreview.providers.runtime import ProviderOptions, ProviderSyncError, build_provider, run_sync_pipeline
 from openreview.sync_core import ReviewFinding
 
 app = typer.Typer(help="openreview - AI-assisted PR review automation")
@@ -107,7 +105,7 @@ def _cap_per_file(findings: list[ReviewFinding], max_comments_per_file: int) -> 
     return out
 
 
-def _build_provider(
+def _provider_options(
     *,
     provider: str,
     organization: str | None,
@@ -120,47 +118,34 @@ def _build_provider(
     gitlab_project_id: str | None,
     gitlab_token: str | None,
     gitlab_base_url: str,
-) -> ReviewProvider:
-    if provider == "github":
-        return GitHubProvider(
-            GitHubClient(
-                owner=_env_or_option(github_owner, "GITHUB_OWNER"),
-                repo=_env_or_option(github_repo, "GITHUB_REPO"),
-                token=_env_or_option(github_token, "GITHUB_TOKEN"),
-            )
-        )
-
-    if provider == "gitlab":
-        return GitLabProvider(
-            GitLabClient(
-                project_id=_env_or_option(gitlab_project_id, "GITLAB_PROJECT_ID"),
-                token=_env_or_option(gitlab_token, "GITLAB_TOKEN"),
-                base_url=gitlab_base_url,
-            )
-        )
-
-    if provider != "azure":
-        raise typer.BadParameter("provider must be one of: azure|github|gitlab")
-
-    return AzureProvider(
-        AzureDevOpsClient(
-            organization=_env_or_option(organization, "AZDO_ORG"),
-            project=_env_or_option(project, "AZDO_PROJECT"),
-            repository_id=_env_or_option(repository_id, "AZDO_REPO_ID"),
-            pat=_env_or_option(pat, "AZDO_PAT"),
-        )
+) -> ProviderOptions:
+    return ProviderOptions(
+        provider=provider,
+        organization=_env_or_option(organization, "AZDO_ORG") if provider == "azure" else organization,
+        project=_env_or_option(project, "AZDO_PROJECT") if provider == "azure" else project,
+        repository_id=_env_or_option(repository_id, "AZDO_REPO_ID") if provider == "azure" else repository_id,
+        pat=_env_or_option(pat, "AZDO_PAT") if provider == "azure" else pat,
+        github_owner=_env_or_option(github_owner, "GITHUB_OWNER") if provider == "github" else github_owner,
+        github_repo=_env_or_option(github_repo, "GITHUB_REPO") if provider == "github" else github_repo,
+        github_token=_env_or_option(github_token, "GITHUB_TOKEN") if provider == "github" else github_token,
+        gitlab_project_id=_env_or_option(gitlab_project_id, "GITLAB_PROJECT_ID") if provider == "gitlab" else gitlab_project_id,
+        gitlab_token=_env_or_option(gitlab_token, "GITLAB_TOKEN") if provider == "gitlab" else gitlab_token,
+        gitlab_base_url=gitlab_base_url,
     )
 
 
-def _sync_with_provider(provider: ReviewProvider, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> None:
-    existing = provider.list_existing(pr_id)
-    actions = provider.plan(findings, existing)
+def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> None:
+    provider = build_provider(options)
+    try:
+        actions, summary = run_sync_pipeline(provider, pr_id, findings, dry_run=dry_run)
+    except ProviderSyncError as err:
+        raise typer.BadParameter(str(err)) from err
 
     print(f"Planned actions: {len(actions)}")
     for action in actions:
-        print(f"- {action.kind} [{action.fingerprint}]")
+        fingerprint = getattr(action, "fingerprint", "n/a")
+        print(f"- {action.kind} [{fingerprint}]")
 
-    summary = provider.apply(pr_id, actions, dry_run=dry_run)
     print(f"Applied actions: {summary.applied}")
 
 
