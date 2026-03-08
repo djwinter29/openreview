@@ -5,8 +5,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-import httpx
-
+from openreview.models.runtime import ModelRequest, generate_text
 from openreview.sync_core import ReviewFinding
 
 
@@ -41,41 +40,43 @@ def _build_prompt(path: str, content: str) -> str:
     )
 
 
-def _call_openai_json(api_key: str, model: str, prompt: str) -> list[dict]:
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "input": prompt,
-        "temperature": 0.1,
-    }
-    with httpx.Client(timeout=90.0) as client:
-        res = client.post("https://api.openai.com/v1/responses", headers=headers, json=payload)
-        res.raise_for_status()
-        data = res.json()
-
-    text = data.get("output_text", "").strip()
+def _unwrap_json_text(text: str) -> str:
     if not text:
-        out = data.get("output") or []
-        parts: list[str] = []
-        for item in out:
-            for c in item.get("content", []):
-                if c.get("type") == "output_text":
-                    parts.append(c.get("text", ""))
-        text = "\n".join(parts).strip()
+        return ""
+    body = text.strip()
+    if body.startswith("```"):
+        body = body.strip("`")
+        if body.lower().startswith("json"):
+            body = body[4:].strip()
+    return body
 
+
+def _call_model_json(
+    api_provider: str,
+    api_key: str,
+    model: str,
+    prompt: str,
+    api_base_url: str | None = None,
+) -> list[dict]:
+    response = generate_text(
+        ModelRequest(
+            provider=api_provider,
+            model=model,
+            api_key=api_key,
+            prompt=prompt,
+            temperature=0.1,
+            base_url=api_base_url,
+        )
+    )
+    text = _unwrap_json_text(response.text)
     if not text:
         return []
-
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-
     parsed = json.loads(text)
     return parsed if isinstance(parsed, list) else []
+
+
+def _call_openai_json(api_key: str, model: str, prompt: str) -> list[dict]:
+    return _call_model_json("openai", api_key, model, prompt)
 
 
 def review_changed_files(
@@ -85,6 +86,8 @@ def review_changed_files(
     files: list[ChangedFile],
     repo_root: Path,
     max_file_chars: int = 8000,
+    api_provider: str = "openai",
+    api_base_url: str | None = None,
 ) -> list[ReviewFinding]:
     findings: list[ReviewFinding] = []
 
@@ -101,7 +104,10 @@ def review_changed_files(
 
         snippet = content[:max_file_chars]
         prompt = _build_prompt(file.path, snippet)
-        items = _call_openai_json(api_key, model, prompt)
+        if api_provider == "openai" and api_base_url is None:
+            items = _call_openai_json(api_key, model, prompt)
+        else:
+            items = _call_model_json(api_provider, api_key, model, prompt, api_base_url)
 
         for item in items:
             try:

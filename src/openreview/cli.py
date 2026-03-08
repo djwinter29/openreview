@@ -134,10 +134,22 @@ def _provider_options(
     )
 
 
+def _model_api_key(provider: str, ai_api_key: str | None, openai_api_key: str | None) -> str:
+    if ai_api_key:
+        return ai_api_key
+    if provider == "openai":
+        return _env_or_option(openai_api_key, "OPENAI_API_KEY")
+    if provider in {"claude", "anthropic"}:
+        return _env_or_option(None, "ANTHROPIC_API_KEY")
+    if provider == "deepseek":
+        return _env_or_option(None, "DEEPSEEK_API_KEY")
+    raise typer.BadParameter("ai-provider must be one of: openai|claude|deepseek")
+
+
 def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> None:
-    provider = build_provider(options)
+    provider_impl = build_provider(options)
     try:
-        actions, summary = run_sync_pipeline(provider, pr_id, findings, dry_run=dry_run)
+        actions, summary = run_sync_pipeline(provider_impl, pr_id, findings, dry_run=dry_run)
     except ProviderSyncError as err:
         raise typer.BadParameter(str(err)) from err
 
@@ -169,7 +181,7 @@ def sync(
     findings_raw = json.loads(findings_file.read_text())
     findings = [ReviewFinding(**item) for item in findings_raw]
 
-    provider_impl = _build_provider(
+    options = _provider_options(
         provider=provider,
         organization=organization,
         project=project,
@@ -182,7 +194,7 @@ def sync(
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
     )
-    _sync_with_provider(provider_impl, pr_id, findings, dry_run=dry_run)
+    _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
 
 
 @app.command()
@@ -202,13 +214,16 @@ def run(
     gitlab_project_id: str | None = typer.Option(None, help="GitLab project id (url-encoded path or numeric id)"),
     gitlab_token: str | None = typer.Option(None, help="GitLab token"),
     gitlab_base_url: str = typer.Option("https://gitlab.com/api/v4", help="GitLab API base URL"),
-    openai_api_key: str | None = typer.Option(None, help="OpenAI API key"),
-    openai_model: str = typer.Option("gpt-4.1-mini", help="OpenAI model"),
+    ai_provider: str = typer.Option("openai", help="openai|claude|deepseek"),
+    ai_api_key: str | None = typer.Option(None, help="Generic AI API key for selected ai-provider"),
+    ai_base_url: str | None = typer.Option(None, help="Optional AI base URL override"),
+    ai_model: str = typer.Option("gpt-4.1-mini", help="AI model name"),
+    openai_api_key: str | None = typer.Option(None, help="OpenAI API key (legacy option)"),
     max_files: int = typer.Option(25, help="Max changed files to review"),
     dry_run: bool = typer.Option(False, help="Only print planned actions"),
 ) -> None:
     cfg = load_config(config_file)
-    openai_api_key = _env_or_option(openai_api_key, "OPENAI_API_KEY")
+    selected_key = _model_api_key(ai_provider, ai_api_key, openai_api_key)
 
     if provider == "azure":
         az = AzureDevOpsClient(
@@ -229,8 +244,10 @@ def run(
     print(f"Changed files considered: {len(files)}")
 
     findings = review_changed_files(
-        api_key=openai_api_key,
-        model=openai_model,
+        api_key=selected_key,
+        model=ai_model,
+        api_provider=ai_provider,
+        api_base_url=ai_base_url,
         files=files,
         repo_root=repo_root,
     )
@@ -243,7 +260,7 @@ def run(
     findings = findings[: cfg.rules.max_comments]
     print(f"AI findings (filtered): {len(findings)}")
 
-    provider_impl = _build_provider(
+    options = _provider_options(
         provider=provider,
         organization=organization,
         project=project,
@@ -256,7 +273,7 @@ def run(
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
     )
-    _sync_with_provider(provider_impl, pr_id, findings, dry_run=dry_run)
+    _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
 
 
 if __name__ == "__main__":

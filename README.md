@@ -1,6 +1,6 @@
 # openreview
 
-AI-assisted PR review automation focused on Azure DevOps, with GitHub provider support in progress.
+AI-assisted PR review automation for Azure DevOps, GitHub, and GitLab, with pluggable AI model providers.
 
 ## What it does (current)
 - Runs on PR updates (new push/force-push)
@@ -107,8 +107,19 @@ You can pass options explicitly, or use env vars:
 - `GITLAB_BASE_URL` (optional, default: `https://gitlab.com/api/v4`)
 
 ### AI
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL` (optional, default in CLI)
+- OpenAI:
+  - `OPENAI_API_KEY`
+- Claude (Anthropic):
+  - `ANTHROPIC_API_KEY`
+- DeepSeek:
+  - `DEEPSEEK_API_KEY`
+
+CLI model options:
+- `--ai-provider openai|claude|deepseek`
+- `--ai-model <model-name>` (default: `gpt-4.1-mini`)
+- `--ai-api-key <key>` (optional explicit override)
+- `--ai-base-url <url>` (optional)
+- `--openai-api-key <key>` (legacy compatibility option)
 
 ## `.openreview.yml` rules
 
