@@ -1,4 +1,6 @@
-from openreview.cli import _cap_per_file, _path_allowed
+import pytest
+
+from openreview.cli import _cap_per_file, _parse_findings_payload, _path_allowed
 from openreview.sync_core import ReviewFinding
 
 
@@ -45,3 +47,44 @@ def test_apply_hunk_mapping_drop_when_outside() -> None:
 
     ys = _apply_hunk_mapping(xs, hunks, changed_lines_only=True)
     assert ys == []
+
+
+def test_parse_findings_payload_ok() -> None:
+    out = _parse_findings_payload([
+        {
+            "path": "/a.py",
+            "line": 12,
+            "severity": "warning",
+            "message": "m",
+            "fingerprint": "fp1",
+            "confidence": 0.8,
+        }
+    ])
+    assert len(out) == 1
+    assert out[0].path == "/a.py"
+    assert out[0].line == 12
+
+
+def test_parse_findings_payload_invalid_severity() -> None:
+    with pytest.raises(Exception):
+        _parse_findings_payload([
+            {
+                "path": "/a.py",
+                "line": 12,
+                "severity": "bad",
+                "message": "m",
+                "fingerprint": "fp1",
+            }
+        ])
+
+
+def test_parse_findings_payload_missing_required() -> None:
+    with pytest.raises(Exception):
+        _parse_findings_payload([
+            {
+                "path": "/a.py",
+                "line": 12,
+                "message": "m",
+                "fingerprint": "fp1",
+            }
+        ])
