@@ -14,6 +14,7 @@ from openreview.ai_reviewer import ChangedFile, review_changed_files
 from openreview.config import load_config
 from openreview.diff_mapper import changed_hunks, nearest_line_or_none
 from openreview.providers.azure import AzureDevOpsClient
+from openreview.providers.base import SyncSummary
 from openreview.providers.runtime import ProviderOptions, ProviderSyncError, build_provider, run_sync_pipeline
 from openreview.sync_core import ReviewFinding
 
@@ -218,7 +219,20 @@ def _model_api_key(provider: str, ai_api_key: str | None, openai_api_key: str | 
     raise typer.BadParameter("ai-provider must be one of: openai|claude|deepseek")
 
 
-def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> None:
+def _print_summary(*, raw_findings: int | None, filtered_findings: int | None, planned_actions: int, summary: SyncSummary) -> None:
+    print("openreview summary")
+    if raw_findings is not None:
+        print(f"- findings_raw: {raw_findings}")
+    if filtered_findings is not None:
+        print(f"- findings_filtered: {filtered_findings}")
+    print(f"- planned_actions: {planned_actions}")
+    print(f"- applied_actions: {summary.applied}")
+    print(f"- created: {summary.created}")
+    print(f"- updated: {summary.updated}")
+    print(f"- closed: {summary.closed}")
+
+
+def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> tuple[int, SyncSummary]:
     provider_impl = build_provider(options)
     try:
         actions, summary = run_sync_pipeline(provider_impl, pr_id, findings, dry_run=dry_run)
@@ -231,6 +245,7 @@ def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[Rev
         print(f"- {action.kind} [{fingerprint}]")
 
     print(f"Applied actions: {summary.applied}")
+    return len(actions), summary
 
 
 @app.command()
@@ -266,7 +281,8 @@ def sync(
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
     )
-    _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    planned, summary = _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    _print_summary(raw_findings=None, filtered_findings=len(findings), planned_actions=planned, summary=summary)
 
 
 @app.command()
@@ -345,7 +361,8 @@ def run(
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
     )
-    _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    planned, summary = _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    _print_summary(raw_findings=len(findings), filtered_findings=len(findings), planned_actions=planned, summary=summary)
 
 
 if __name__ == "__main__":
