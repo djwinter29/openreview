@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich import print
@@ -13,6 +14,7 @@ from openreview.ai_reviewer import ChangedFile, review_changed_files
 from openreview.config import load_config
 from openreview.diff_mapper import changed_hunks, nearest_line_or_none
 from openreview.providers.azure import AzureDevOpsClient
+from openreview.providers.base import SyncSummary
 from openreview.providers.runtime import ProviderOptions, ProviderSyncError, build_provider, run_sync_pipeline
 from openreview.sync_core import ReviewFinding
 
@@ -49,20 +51,45 @@ def _env_or_option(value: str | None, env_name: str) -> str:
     raise typer.BadParameter(f"Missing value. Provide --{env_name.lower().replace('_', '-')} or set {env_name}")
 
 
+def _normalize_message_for_dedupe(message: str) -> str:
+    text = " ".join(str(message).strip().lower().split())
+    return "".join(ch for ch in text if ch.isalpha() or ch.isspace()).strip()
+
+
 def _filter_findings(findings: list[ReviewFinding], min_severity: str, min_confidence: float) -> list[ReviewFinding]:
     floor = SEVERITY_RANK.get(min_severity, 2)
-    kept: list[ReviewFinding] = []
-    seen: set[str] = set()
+    by_fp: dict[str, ReviewFinding] = {}
+
     for f in findings:
         if SEVERITY_RANK.get(f.severity, 2) < floor:
             continue
         if f.confidence < min_confidence:
             continue
-        if f.fingerprint in seen:
+
+        prev = by_fp.get(f.fingerprint)
+        if prev is None:
+            by_fp[f.fingerprint] = f
             continue
-        seen.add(f.fingerprint)
-        kept.append(f)
-    return kept
+
+        prev_rank = (SEVERITY_RANK.get(prev.severity, 2), prev.confidence)
+        curr_rank = (SEVERITY_RANK.get(f.severity, 2), f.confidence)
+        if curr_rank > prev_rank:
+            by_fp[f.fingerprint] = f
+
+    by_semantic: dict[tuple[str, str], ReviewFinding] = {}
+    for f in by_fp.values():
+        semantic_key = (f.path, _normalize_message_for_dedupe(f.message))
+        prev = by_semantic.get(semantic_key)
+        if prev is None:
+            by_semantic[semantic_key] = f
+            continue
+
+        prev_rank = (SEVERITY_RANK.get(prev.severity, 2), prev.confidence)
+        curr_rank = (SEVERITY_RANK.get(f.severity, 2), f.confidence)
+        if curr_rank > prev_rank:
+            by_semantic[semantic_key] = f
+
+    return list(by_semantic.values())
 
 
 def _path_allowed(path: str, include_paths: list[str], exclude_paths: list[str]) -> bool:
@@ -103,6 +130,52 @@ def _cap_per_file(findings: list[ReviewFinding], max_comments_per_file: int) -> 
         counts[f.path] = used + 1
         out.append(f)
     return out
+
+
+def _parse_findings_payload(findings_raw: Any) -> list[ReviewFinding]:
+    if not isinstance(findings_raw, list):
+        raise typer.BadParameter("findings JSON must be an array of objects")
+
+    findings: list[ReviewFinding] = []
+    for i, item in enumerate(findings_raw, start=1):
+        if not isinstance(item, dict):
+            raise typer.BadParameter(f"findings[{i}] must be an object")
+
+        missing = [k for k in ("path", "line", "severity", "message", "fingerprint") if k not in item]
+        if missing:
+            raise typer.BadParameter(f"findings[{i}] missing required fields: {', '.join(missing)}")
+
+        try:
+            line = int(item["line"])
+        except (TypeError, ValueError):
+            raise typer.BadParameter(f"findings[{i}].line must be an integer")
+        if line < 1:
+            raise typer.BadParameter(f"findings[{i}].line must be >= 1")
+
+        severity = str(item["severity"]).lower()
+        if severity not in SEVERITY_RANK:
+            raise typer.BadParameter(f"findings[{i}].severity must be one of: info|warning|error")
+
+        try:
+            confidence = float(item.get("confidence", 0.7))
+        except (TypeError, ValueError):
+            raise typer.BadParameter(f"findings[{i}].confidence must be a number in [0,1]")
+        if not (0.0 <= confidence <= 1.0):
+            raise typer.BadParameter(f"findings[{i}].confidence must be a number in [0,1]")
+
+        findings.append(
+            ReviewFinding(
+                path=str(item["path"]),
+                line=line,
+                severity=severity,
+                message=str(item["message"]),
+                fingerprint=str(item["fingerprint"]),
+                confidence=confidence,
+                suggestion=str(item.get("suggestion", "")),
+                meta=item.get("meta") if isinstance(item.get("meta"), dict) else {},
+            )
+        )
+    return findings
 
 
 def _provider_options(
@@ -146,7 +219,20 @@ def _model_api_key(provider: str, ai_api_key: str | None, openai_api_key: str | 
     raise typer.BadParameter("ai-provider must be one of: openai|claude|deepseek")
 
 
-def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> None:
+def _print_summary(*, raw_findings: int | None, filtered_findings: int | None, planned_actions: int, summary: SyncSummary) -> None:
+    print("openreview summary")
+    if raw_findings is not None:
+        print(f"- findings_raw: {raw_findings}")
+    if filtered_findings is not None:
+        print(f"- findings_filtered: {filtered_findings}")
+    print(f"- planned_actions: {planned_actions}")
+    print(f"- applied_actions: {summary.applied}")
+    print(f"- created: {summary.created}")
+    print(f"- updated: {summary.updated}")
+    print(f"- closed: {summary.closed}")
+
+
+def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> tuple[int, SyncSummary]:
     provider_impl = build_provider(options)
     try:
         actions, summary = run_sync_pipeline(provider_impl, pr_id, findings, dry_run=dry_run)
@@ -159,6 +245,7 @@ def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[Rev
         print(f"- {action.kind} [{fingerprint}]")
 
     print(f"Applied actions: {summary.applied}")
+    return len(actions), summary
 
 
 @app.command()
@@ -179,7 +266,7 @@ def sync(
     dry_run: bool = typer.Option(False, help="Only print planned actions"),
 ) -> None:
     findings_raw = json.loads(findings_file.read_text())
-    findings = [ReviewFinding(**item) for item in findings_raw]
+    findings = _parse_findings_payload(findings_raw)
 
     options = _provider_options(
         provider=provider,
@@ -194,7 +281,8 @@ def sync(
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
     )
-    _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    planned, summary = _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    _print_summary(raw_findings=None, filtered_findings=len(findings), planned_actions=planned, summary=summary)
 
 
 @app.command()
@@ -273,7 +361,8 @@ def run(
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
     )
-    _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    planned, summary = _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    _print_summary(raw_findings=len(findings), filtered_findings=len(findings), planned_actions=planned, summary=summary)
 
 
 if __name__ == "__main__":
