@@ -50,20 +50,45 @@ def _env_or_option(value: str | None, env_name: str) -> str:
     raise typer.BadParameter(f"Missing value. Provide --{env_name.lower().replace('_', '-')} or set {env_name}")
 
 
+def _normalize_message_for_dedupe(message: str) -> str:
+    text = " ".join(str(message).strip().lower().split())
+    return "".join(ch for ch in text if ch.isalpha() or ch.isspace()).strip()
+
+
 def _filter_findings(findings: list[ReviewFinding], min_severity: str, min_confidence: float) -> list[ReviewFinding]:
     floor = SEVERITY_RANK.get(min_severity, 2)
-    kept: list[ReviewFinding] = []
-    seen: set[str] = set()
+    by_fp: dict[str, ReviewFinding] = {}
+
     for f in findings:
         if SEVERITY_RANK.get(f.severity, 2) < floor:
             continue
         if f.confidence < min_confidence:
             continue
-        if f.fingerprint in seen:
+
+        prev = by_fp.get(f.fingerprint)
+        if prev is None:
+            by_fp[f.fingerprint] = f
             continue
-        seen.add(f.fingerprint)
-        kept.append(f)
-    return kept
+
+        prev_rank = (SEVERITY_RANK.get(prev.severity, 2), prev.confidence)
+        curr_rank = (SEVERITY_RANK.get(f.severity, 2), f.confidence)
+        if curr_rank > prev_rank:
+            by_fp[f.fingerprint] = f
+
+    by_semantic: dict[tuple[str, str], ReviewFinding] = {}
+    for f in by_fp.values():
+        semantic_key = (f.path, _normalize_message_for_dedupe(f.message))
+        prev = by_semantic.get(semantic_key)
+        if prev is None:
+            by_semantic[semantic_key] = f
+            continue
+
+        prev_rank = (SEVERITY_RANK.get(prev.severity, 2), prev.confidence)
+        curr_rank = (SEVERITY_RANK.get(f.severity, 2), f.confidence)
+        if curr_rank > prev_rank:
+            by_semantic[semantic_key] = f
+
+    return list(by_semantic.values())
 
 
 def _path_allowed(path: str, include_paths: list[str], exclude_paths: list[str]) -> bool:

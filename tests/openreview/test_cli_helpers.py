@@ -40,6 +40,31 @@ def test_filter_by_severity_and_confidence() -> None:
     assert [x.fingerprint for x in ys] == ['c']
 
 
+def test_filter_prefers_higher_rank_for_same_fingerprint() -> None:
+    xs = [
+        mk('/a.c', 10, 'warning', 0.6, 'same'),
+        mk('/a.c', 11, 'error', 0.7, 'same'),
+    ]
+    from openreview.cli import _filter_findings
+
+    ys = _filter_findings(xs, min_severity='warning', min_confidence=0.0)
+    assert len(ys) == 1
+    assert ys[0].severity == 'error'
+
+
+def test_filter_dedupes_semantic_duplicates_on_same_path() -> None:
+    from openreview.cli import _filter_findings
+
+    xs = [
+        ReviewFinding(path='/a.c', line=10, severity='warning', confidence=0.7, message='Potential NULL dereference!', fingerprint='fp1'),
+        ReviewFinding(path='/a.c', line=18, severity='error', confidence=0.8, message='potential null dereference', fingerprint='fp2'),
+    ]
+
+    ys = _filter_findings(xs, min_severity='warning', min_confidence=0.0)
+    assert len(ys) == 1
+    assert ys[0].fingerprint == 'fp2'
+
+
 def test_apply_hunk_mapping_drop_when_outside() -> None:
     xs = [mk('/a.c', 50, 'warning', 0.9, 'a')]
     hunks = {'/a.c': []}
