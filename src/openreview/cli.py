@@ -219,7 +219,40 @@ def _model_api_key(provider: str, ai_api_key: str | None, openai_api_key: str | 
     raise typer.BadParameter("ai-provider must be one of: openai|claude|deepseek")
 
 
-def _print_summary(*, raw_findings: int | None, filtered_findings: int | None, planned_actions: int, summary: SyncSummary) -> None:
+def _summary_payload(*, raw_findings: int | None, filtered_findings: int | None, planned_actions: int, summary: SyncSummary) -> dict[str, int]:
+    payload: dict[str, int] = {
+        "planned_actions": planned_actions,
+        "applied_actions": summary.applied,
+        "created": summary.created,
+        "updated": summary.updated,
+        "closed": summary.closed,
+        "skipped": max(0, planned_actions - summary.applied),
+    }
+    if raw_findings is not None:
+        payload["findings_raw"] = raw_findings
+    if filtered_findings is not None:
+        payload["findings_filtered"] = filtered_findings
+    return payload
+
+
+def _print_summary(
+    *,
+    raw_findings: int | None,
+    filtered_findings: int | None,
+    planned_actions: int,
+    summary: SyncSummary,
+    summary_json: bool = False,
+) -> None:
+    payload = _summary_payload(
+        raw_findings=raw_findings,
+        filtered_findings=filtered_findings,
+        planned_actions=planned_actions,
+        summary=summary,
+    )
+    if summary_json:
+        print(json.dumps(payload, sort_keys=True))
+        return
+
     print("openreview summary")
     if raw_findings is not None:
         print(f"- findings_raw: {raw_findings}")
@@ -230,6 +263,7 @@ def _print_summary(*, raw_findings: int | None, filtered_findings: int | None, p
     print(f"- created: {summary.created}")
     print(f"- updated: {summary.updated}")
     print(f"- closed: {summary.closed}")
+    print(f"- skipped: {max(0, planned_actions - summary.applied)}")
 
 
 def _sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> tuple[int, SyncSummary]:
@@ -264,6 +298,7 @@ def sync(
     gitlab_token: str | None = typer.Option(None, help="GitLab token"),
     gitlab_base_url: str = typer.Option("https://gitlab.com/api/v4", help="GitLab API base URL"),
     dry_run: bool = typer.Option(False, help="Only print planned actions"),
+    summary_json: bool = typer.Option(False, "--summary-json", help="Print summary as JSON"),
 ) -> None:
     findings_raw = json.loads(findings_file.read_text())
     findings = _parse_findings_payload(findings_raw)
@@ -282,7 +317,13 @@ def sync(
         gitlab_base_url=gitlab_base_url,
     )
     planned, summary = _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
-    _print_summary(raw_findings=None, filtered_findings=len(findings), planned_actions=planned, summary=summary)
+    _print_summary(
+        raw_findings=None,
+        filtered_findings=len(findings),
+        planned_actions=planned,
+        summary=summary,
+        summary_json=summary_json,
+    )
 
 
 @app.command()
@@ -309,6 +350,7 @@ def run(
     openai_api_key: str | None = typer.Option(None, help="OpenAI API key (legacy option)"),
     max_files: int = typer.Option(25, help="Max changed files to review"),
     dry_run: bool = typer.Option(False, help="Only print planned actions"),
+    summary_json: bool = typer.Option(False, "--summary-json", help="Print summary as JSON"),
 ) -> None:
     cfg = load_config(config_file)
     selected_key = _model_api_key(ai_provider, ai_api_key, openai_api_key)
@@ -362,7 +404,13 @@ def run(
         gitlab_base_url=gitlab_base_url,
     )
     planned, summary = _sync_with_provider(options, pr_id, findings, dry_run=dry_run)
-    _print_summary(raw_findings=len(findings), filtered_findings=len(findings), planned_actions=planned, summary=summary)
+    _print_summary(
+        raw_findings=len(findings),
+        filtered_findings=len(findings),
+        planned_actions=planned,
+        summary=summary,
+        summary_json=summary_json,
+    )
 
 
 if __name__ == "__main__":
