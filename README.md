@@ -86,6 +86,25 @@ openreview run \
 
 Without `--dry-run`, comments are applied.
 
+### Summary output
+
+Both `sync` and `run` print a summary at the end. For machine-readable output, use `--summary-json`.
+
+```bash
+openreview sync \
+  --pr-id 123 \
+  --findings-file findings.json \
+  --provider github \
+  --dry-run \
+  --summary-json
+```
+
+Example JSON fields:
+- `findings_raw` / `findings_filtered` (when available)
+- `planned_actions`
+- `applied_actions`
+- `created`, `updated`, `closed`, `skipped`
+
 ## Configuration
 
 You can pass options explicitly, or use env vars:
@@ -138,6 +157,9 @@ rules:
 
 ## Findings JSON format
 
+`openreview sync` validates findings input and reports clear CLI errors for malformed payloads (missing required fields, invalid severity, invalid line/confidence types).
+
+
 `findings.json` is an array:
 
 ```json
@@ -150,6 +172,14 @@ rules:
     "fingerprint": "foo-null"
   }
 ]
+```
+
+## CI quality gate
+
+CI runs tests with coverage and enforces a minimum threshold:
+
+```bash
+pytest --cov=src/openreview --cov-report=term --cov-fail-under=75
 ```
 
 ## Development
