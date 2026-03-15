@@ -19,3 +19,29 @@ jobs:
           pip install -e . pytest pytest-cov
       - name: Test (with coverage gate)
         run: pytest --cov=src/openreview --cov-report=term --cov-fail-under=75
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Doxygen toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz make latexmk texlive-latex-extra texlive-fonts-recommended
+      - name: Create documentation output directory
+        run: mkdir -p build/docs/doxygen
+      - name: Generate Doxygen HTML and LaTeX
+        run: doxygen Doxyfile
+      - name: Build PDF documentation
+        run: latexmk -pdf -interaction=nonstopmode -halt-on-error refman.tex
+        working-directory: build/docs/doxygen/latex
+      - name: Upload HTML docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: doxygen-html
+          path: build/docs/doxygen/html
+      - name: Upload PDF docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: doxygen-pdf
+          path: build/docs/doxygen/latex/refman.pdf
