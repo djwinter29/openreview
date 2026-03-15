@@ -28,6 +28,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y doxygen graphviz make latexmk texlive-latex-extra texlive-fonts-recommended
+      - name: Create documentation output directory
+        run: mkdir -p build/docs/doxygen
       - name: Generate Doxygen HTML and LaTeX
         run: doxygen Doxyfile
       - name: Build PDF documentation

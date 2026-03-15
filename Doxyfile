@@ -38,7 +38,6 @@ GENERATE_LATEX         = YES
 LATEX_OUTPUT           = latex
 USE_PDFLATEX           = YES
 LATEX_BATCHMODE        = YES
-LATEX_SOURCE_CODE      = YES
 
 GENERATE_XML           = NO
 GENERATE_RTF           = NO
@@ -51,7 +50,6 @@ REFERENCES_RELATION    = YES
 VERBATIM_HEADERS       = NO
 
 HAVE_DOT               = YES
-CLASS_DIAGRAMS         = YES
 DOT_IMAGE_FORMAT       = svg
 INTERACTIVE_SVG        = YES
 CALL_GRAPH             = NO

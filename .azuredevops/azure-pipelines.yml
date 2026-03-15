@@ -50,6 +50,10 @@ steps:
     displayName: Install Doxygen toolchain
 
   - script: |
+      mkdir -p build/docs/doxygen
+    displayName: Create documentation output directory
+
+  - script: |
       doxygen Doxyfile
     displayName: Generate Doxygen HTML and LaTeX
 
