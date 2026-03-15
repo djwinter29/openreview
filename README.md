@@ -2,6 +2,17 @@
 
 AI-assisted PR review automation for Azure DevOps, GitHub, and GitLab, with pluggable AI model providers.
 
+## Documentation
+
+Project documentation now lives in the docs folder.
+
+- Overview: [docs/README.md](docs/README.md)
+- Architecture: [docs/architecture.md](docs/architecture.md)
+- Configuration and CLI usage: [docs/configuration.md](docs/configuration.md)
+- CI and pipeline notes: [docs/ci.md](docs/ci.md)
+
+The Azure DevOps sample pipeline file is now located at `.azuredevops/azure-pipelines.yml`.
+
 ## What it does (current)
 - Runs on PR updates (new push/force-push)
 - Reviews changed code with AI
@@ -107,6 +118,8 @@ Example JSON fields:
 
 ## Configuration
 
+See [docs/configuration.md](docs/configuration.md) for command flow, provider setup, environment variables, and `.openreview.yml` rules.
+
 You can pass options explicitly, or use env vars:
 
 ### Azure DevOps
@@ -192,6 +205,13 @@ pip install -e . pytest pytest-cov build twine
 pytest -q
 pytest --cov=src/openreview --cov-report=term -q
 ```
+
+## Repository Layout
+
+- `src/openreview/`: application, domain, reviewer, adapter, and config code
+- `tests/openreview/`: unit test suite aligned to the runtime architecture
+- `docs/`: project documentation and operational notes
+- `.azuredevops/azure-pipelines.yml`: sample Azure DevOps pipeline
 
 ## License
 

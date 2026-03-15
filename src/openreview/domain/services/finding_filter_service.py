@@ -1,3 +1,5 @@
+"""! Domain logic for deduplicating and constraining findings."""
+
 from __future__ import annotations
 
 from openreview.domain.entities.diff_hunk import Hunk
@@ -8,11 +10,15 @@ SEVERITY_RANK = {"info": 1, "warning": 2, "error": 3}
 
 
 def normalize_message_for_dedupe(message: str) -> str:
+    """! Normalize finding text for semantic duplicate detection."""
+
     text = " ".join(str(message).strip().lower().split())
     return "".join(ch for ch in text if ch.isalpha() or ch.isspace()).strip()
 
 
 def filter_findings(findings: list[ReviewFinding], min_severity: str, min_confidence: float) -> list[ReviewFinding]:
+    """! Remove low-signal findings and deduplicate the remainder."""
+
     floor = SEVERITY_RANK.get(min_severity, 2)
     by_fp: dict[str, ReviewFinding] = {}
 
@@ -49,6 +55,8 @@ def filter_findings(findings: list[ReviewFinding], min_severity: str, min_confid
 
 
 def path_allowed(path: str, include_paths: list[str], exclude_paths: list[str]) -> bool:
+    """! Check whether a file path passes include and exclude filters."""
+
     if include_paths and not any(path.startswith(prefix) for prefix in include_paths):
         return False
     if any(path.startswith(prefix) for prefix in exclude_paths):
@@ -57,6 +65,8 @@ def path_allowed(path: str, include_paths: list[str], exclude_paths: list[str]) 
 
 
 def apply_hunk_mapping(findings: list[ReviewFinding], hunks_by_file: dict[str, list[Hunk]], changed_lines_only: bool) -> list[ReviewFinding]:
+    """! Keep or remap findings based on the actual changed line hunks."""
+
     out: list[ReviewFinding] = []
     for finding in findings:
         mapped = nearest_line_or_none(finding.path, finding.line, hunks_by_file)
@@ -71,6 +81,8 @@ def apply_hunk_mapping(findings: list[ReviewFinding], hunks_by_file: dict[str, l
 
 
 def cap_per_file(findings: list[ReviewFinding], max_comments_per_file: int) -> list[ReviewFinding]:
+    """! Limit surviving findings per file based on severity and confidence."""
+
     if max_comments_per_file <= 0:
         return findings
 

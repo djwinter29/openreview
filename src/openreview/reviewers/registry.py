@@ -1,3 +1,5 @@
+"""! Registry of built-in review agents."""
+
 from __future__ import annotations
 
 from openreview.reviewers.base import ReviewAgentSpec

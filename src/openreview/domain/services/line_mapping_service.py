@@ -1,3 +1,5 @@
+"""! Services for mapping findings to changed diff hunks."""
+
 from __future__ import annotations
 
 import re
@@ -8,6 +10,8 @@ from openreview.domain.entities.diff_hunk import Hunk
 
 
 def changed_hunks(repo_root: Path, target_ref: str) -> dict[str, list[Hunk]]:
+    """! Parse zero-context git diff output into hunks keyed by file path."""
+
     cmd = ["git", "-C", str(repo_root), "diff", "--unified=0", f"{target_ref}...HEAD"]
     out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
 
@@ -31,6 +35,8 @@ def changed_hunks(repo_root: Path, target_ref: str) -> dict[str, list[Hunk]]:
 
 
 def nearest_line_or_none(path: str, line: int, hunks_by_file: dict[str, list[Hunk]]) -> int | None:
+    """! Return the line when it falls inside a changed hunk, otherwise `None`."""
+
     hunks = hunks_by_file.get(path) or []
     if not hunks:
         return None

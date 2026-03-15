@@ -1,9 +1,13 @@
+"""! Pydantic models that define review policy configuration."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
 
 class OpenReviewRules(BaseModel):
+    """! Rule set controlling filtering and comment volume."""
+
     min_confidence: float = Field(default=0.6, ge=0.0, le=1.0)
     min_severity: str = Field(default="warning")
     max_comments: int = Field(default=30, ge=1)
@@ -14,4 +18,6 @@ class OpenReviewRules(BaseModel):
 
 
 class OpenReviewConfig(BaseModel):
+    """! Root configuration document for the tool."""
+
     rules: OpenReviewRules = Field(default_factory=OpenReviewRules)

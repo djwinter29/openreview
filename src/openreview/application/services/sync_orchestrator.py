@@ -1,3 +1,5 @@
+"""! Helpers for provider option resolution and sync summary output."""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +13,8 @@ from openreview.ports.scm import SyncSummary
 
 
 def env_or_option(value: str | None, env_name: str) -> str:
+    """! Resolve a required value from a CLI option or environment variable."""
+
     import os
 
     if value:
@@ -35,6 +39,8 @@ def provider_options(
     gitlab_token: str | None,
     gitlab_base_url: str,
 ) -> ProviderOptions:
+    """! Build normalized SCM provider options from CLI inputs and environment."""
+
     return ProviderOptions(
         provider=provider,
         organization=env_or_option(organization, "AZDO_ORG") if provider == "azure" else organization,
@@ -51,6 +57,8 @@ def provider_options(
 
 
 def model_api_key(provider: str, ai_api_key: str | None, openai_api_key: str | None) -> str:
+    """! Resolve the API key required for the selected model provider."""
+
     if ai_api_key:
         return ai_api_key
     if provider == "openai":
@@ -63,6 +71,8 @@ def model_api_key(provider: str, ai_api_key: str | None, openai_api_key: str | N
 
 
 def summary_payload(*, raw_findings: int | None, filtered_findings: int | None, planned_actions: int, summary: SyncSummary) -> dict[str, int]:
+    """! Convert sync results into a serializable summary dictionary."""
+
     payload: dict[str, int] = {
         "planned_actions": planned_actions,
         "applied_actions": summary.applied,
@@ -86,6 +96,8 @@ def print_summary(
     summary: SyncSummary,
     summary_json: bool = False,
 ) -> None:
+    """! Print sync results as either plain text or JSON."""
+
     payload = summary_payload(
         raw_findings=raw_findings,
         filtered_findings=filtered_findings,
@@ -110,6 +122,11 @@ def print_summary(
 
 
 def sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> tuple[int, SyncSummary]:
+    """! Execute provider sync and print the planned actions.
+
+    @return A tuple containing the number of planned actions and the provider summary.
+    """
+
     provider_impl = build_provider(options)
     try:
         actions, summary = run_sync_pipeline(provider_impl, pr_id, findings, dry_run=dry_run)

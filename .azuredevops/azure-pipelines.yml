@@ -43,3 +43,31 @@ steps:
       AZDO_PAT: $(AZDO_PAT)
       OPENAI_API_KEY: $(OPENAI_API_KEY)
       OPENAI_MODEL: $(OPENAI_MODEL)
+
+  - script: |
+      sudo apt-get update
+      sudo apt-get install -y doxygen graphviz make latexmk texlive-latex-extra texlive-fonts-recommended
+    displayName: Install Doxygen toolchain
+
+  - script: |
+      doxygen Doxyfile
+    displayName: Generate Doxygen HTML and LaTeX
+
+  - script: |
+      latexmk -pdf -interaction=nonstopmode -halt-on-error refman.tex
+    workingDirectory: $(Build.SourcesDirectory)/build/docs/doxygen/latex
+    displayName: Build Doxygen PDF
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: $(Build.SourcesDirectory)/build/docs/doxygen/html
+      artifact: doxygen-html
+      publishLocation: pipeline
+    displayName: Publish Doxygen HTML
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: $(Build.SourcesDirectory)/build/docs/doxygen/latex/refman.pdf
+      artifact: doxygen-pdf
+      publishLocation: pipeline
+    displayName: Publish Doxygen PDF

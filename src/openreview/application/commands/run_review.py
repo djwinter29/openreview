@@ -1,3 +1,5 @@
+"""! Application command for end-to-end review execution."""
+
 from __future__ import annotations
 
 import subprocess
@@ -26,6 +28,8 @@ from openreview.reviewers.agents.general_code_review import review_changed_files
 
 
 def _git_changed_paths(repo_root: Path, base_ref: str) -> list[str]:
+    """! Return repository-rooted paths changed between the base ref and HEAD."""
+
     try:
         diff_out = subprocess.check_output(
             ["git", "-C", str(repo_root), "diff", "--name-only", f"{base_ref}...HEAD"],
@@ -67,6 +71,13 @@ def execute_run(
     dry_run: bool,
     summary_json: bool,
 ) -> None:
+    """! Execute the full review workflow for a pull request.
+
+    The workflow loads review policy, collects changed files, invokes the review
+    agent, filters and maps findings, and then synchronizes the resulting
+    comments with the configured SCM provider.
+    """
+
     cfg = load_config(config_file)
     selected_key = model_api_key(ai_provider, ai_api_key, openai_api_key)
     options = provider_options(

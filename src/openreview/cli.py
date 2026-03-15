@@ -1,3 +1,5 @@
+"""! Command-line interface for running and syncing reviews."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,16 +25,22 @@ app = typer.Typer(help="openreview - AI-assisted PR review automation")
 
 @app.callback()
 def _root() -> None:
+    """! Register the CLI root command group."""
+
     pass
 
 
 @app.command()
 def version() -> None:
+    """! Print the installed openreview version."""
+
     print(f"openreview {__version__}")
 
 
 @app.command()
 def plan() -> None:
+    """! Print the high-level review workflow."""
+
     print("[bold]MVP Plan[/bold]")
     print("1) Collect Azure DevOps PR threads + latest diff")
     print("2) Run AI reviewer policy on changed files")
@@ -58,6 +66,8 @@ def sync(
     dry_run: bool = typer.Option(False, help="Only print planned actions"),
     summary_json: bool = typer.Option(False, "--summary-json", help="Print summary as JSON"),
 ) -> None:
+    """! Sync a findings JSON payload into the selected SCM provider."""
+
     execute_sync(
         pr_id=pr_id,
         findings_file=findings_file,
@@ -103,6 +113,8 @@ def run(
     dry_run: bool = typer.Option(False, help="Only print planned actions"),
     summary_json: bool = typer.Option(False, "--summary-json", help="Print summary as JSON"),
 ) -> None:
+    """! Run the review workflow against changed files and sync the result."""
+
     execute_run(
         pr_id=pr_id,
         repo_root=repo_root,

@@ -1,3 +1,5 @@
+"""! Validation helpers for converting raw JSON into domain findings."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -9,6 +11,13 @@ from openreview.domain.services.finding_filter_service import SEVERITY_RANK
 
 
 def parse_findings_payload(findings_raw: Any) -> list[ReviewFinding]:
+    """! Validate a deserialized findings payload.
+
+    @param findings_raw Python value obtained from JSON parsing.
+    @return A list of validated review findings.
+    @exception typer.BadParameter Raised when the payload shape is invalid.
+    """
+
     if not isinstance(findings_raw, list):
         raise typer.BadParameter("findings JSON must be an array of objects")
 

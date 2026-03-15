@@ -1,3 +1,5 @@
+"""! Application command for syncing precomputed findings."""
+
 from __future__ import annotations
 
 import json
@@ -32,6 +34,15 @@ def execute_sync(
     dry_run: bool,
     summary_json: bool,
 ) -> None:
+    """! Load findings from disk, validate them, and sync them to a provider.
+
+    @param pr_id Pull request or merge request identifier.
+    @param findings_file Path to a JSON array of finding objects.
+    @param provider Selected SCM provider name.
+    @param dry_run When true, only print planned actions.
+    @param summary_json When true, print a machine-readable summary.
+    """
+
     try:
         findings_raw = json.loads(findings_file.read_text())
     except JSONDecodeError as err:

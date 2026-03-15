@@ -1,3 +1,5 @@
+"""! Domain entity describing one review finding."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -5,6 +7,8 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ReviewFinding:
+    """! Normalized review issue ready for filtering and synchronization."""
+
     path: str
     line: int
     severity: str

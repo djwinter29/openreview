@@ -1,3 +1,5 @@
+"""! Configuration loading and validation helpers for openreview."""
+
 from openreview.config.loader import load_config
 from openreview.config.schema import OpenReviewConfig, OpenReviewRules
 

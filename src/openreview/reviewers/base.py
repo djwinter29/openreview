@@ -1,3 +1,5 @@
+"""! Common reviewer contracts shared by review agent implementations."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,11 +12,15 @@ from openreview.domain.entities.finding import ReviewFinding
 
 @dataclass(frozen=True)
 class ReviewAgentSpec:
+    """! Metadata describing a selectable review agent."""
+
     name: str
     description: str
 
 
 class Reviewer(Protocol):
+    """! Interface implemented by reviewers that inspect changed files."""
+
     def review_files(
         self,
         *,

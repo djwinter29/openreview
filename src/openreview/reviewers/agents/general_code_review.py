@@ -1,3 +1,5 @@
+"""! Built-in review agent that asks an LLM for structured findings."""
+
 from __future__ import annotations
 
 import json
@@ -10,6 +12,8 @@ from openreview.domain.services.fingerprint_service import build_fingerprint
 
 
 def _build_prompt(path: str, content: str) -> str:
+    """! Build the prompt used to review a single changed file."""
+
     return (
         "You are a strict senior code reviewer. "
         "Return ONLY valid JSON array. "
@@ -23,6 +27,8 @@ def _build_prompt(path: str, content: str) -> str:
 
 
 def _unwrap_json_text(text: str) -> str:
+    """! Remove Markdown code fences around a JSON response, when present."""
+
     if not text:
         return ""
     body = text.strip()
@@ -40,6 +46,8 @@ def _call_model_json(
     prompt: str,
     api_base_url: str | None = None,
 ) -> list[dict]:
+    """! Call the configured model provider and parse the JSON array response."""
+
     response = generate_text(
         ModelRequest(
             provider=api_provider,
@@ -61,6 +69,8 @@ def _call_model_json(
 
 
 def _call_openai_json(api_key: str, model: str, prompt: str) -> list[dict]:
+    """! Convenience wrapper for OpenAI-compatible JSON review calls."""
+
     return _call_model_json("openai", api_key, model, prompt)
 
 
@@ -74,6 +84,8 @@ def review_changed_files(
     api_provider: str = "openai",
     api_base_url: str | None = None,
 ) -> list[ReviewFinding]:
+    """! Review each changed file and convert the model output into findings."""
+
     findings: list[ReviewFinding] = []
 
     for file in files:
