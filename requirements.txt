@@ -1,0 +1,6 @@
+gcovr
+httpx
+pydantic
+typer
+rich
+PyYAML
