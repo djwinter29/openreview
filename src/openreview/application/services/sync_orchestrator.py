@@ -105,7 +105,7 @@ def print_summary(
         summary=summary,
     )
     if summary_json:
-        print(json.dumps(payload, sort_keys=True))
+        typer.echo(json.dumps(payload, sort_keys=True))
         return
 
     print("openreview summary")

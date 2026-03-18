@@ -10,15 +10,6 @@ from rich import print
 from openreview import __version__
 from openreview.application.commands.run_review import execute_run
 from openreview.application.commands.sync_findings import execute_sync
-from openreview.application.services.finding_pipeline import parse_findings_payload as _parse_findings_payload
-from openreview.application.services.sync_orchestrator import print_summary as _print_summary
-from openreview.domain.services.finding_filter_service import (
-    SEVERITY_RANK,
-    apply_hunk_mapping as _apply_hunk_mapping,
-    cap_per_file as _cap_per_file,
-    filter_findings as _filter_findings,
-    path_allowed as _path_allowed,
-)
 
 app = typer.Typer(help="openreview - AI-assisted PR review automation")
 
