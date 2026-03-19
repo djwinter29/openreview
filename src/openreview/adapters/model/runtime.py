@@ -1,28 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import httpx
 
-
-@dataclass
-class ModelRequest:
-    provider: str
-    model: str
-    api_key: str
-    prompt: str
-    system_prompt: str | None = None
-    temperature: float = 0.1
-    max_output_tokens: int | None = None
-    base_url: str | None = None
-
-
-@dataclass
-class ModelResponse:
-    text: str
-    usage: dict | None
-    finish_reason: str | None
-    raw: dict
+from openreview.ports.model import ModelRequest, ModelResponse
 
 
 class ModelConfigError(ValueError):

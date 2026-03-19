@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from openreview.adapters.model.runtime import ModelRequest, generate_text
 from openreview.domain.entities.changed_file import ChangedFile
 from openreview.domain.entities.finding import ReviewFinding
 from openreview.domain.services.fingerprint_service import build_fingerprint
+from openreview.ports.model import ModelRequest
+from openreview.adapters.model.runtime import generate_text
 
 
 def _build_prompt(path: str, content: str) -> str:

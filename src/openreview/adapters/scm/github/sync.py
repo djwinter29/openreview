@@ -3,10 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.services.comment_sync_planner import comment_for_finding
-
-CLOSED_MARKER = "<!-- openreview:status=closed -->"
-SUMMARY_MARKER = "<!-- openreview:summary -->"
+from openreview.domain.services.comment_sync_planner import ExistingComment, PlannedCommentAction, build_summary_content, extract_fingerprint, find_summary_item, plan_comment_sync
 
 
 @dataclass
@@ -16,97 +13,60 @@ class GitHubAction:
     payload: dict
 
 
-def extract_fingerprint_from_body(body: str) -> str | None:
-    token = "<!-- openreview:fingerprint="
-    if token not in body:
-        return None
-    start = body.find(token) + len(token)
-    end = body.find("-->", start)
-    if end == -1:
-        return None
-    return body[start:end].strip()
-
-
-def is_closed_comment(body: str) -> bool:
-    return CLOSED_MARKER in body
-
-
-def close_body(old_body: str) -> str:
-    if CLOSED_MARKER in old_body:
-        return old_body
-    return f"{old_body}\n\n{CLOSED_MARKER}\nResolved in latest revision."
-
-
 def _path_for_github(path: str) -> str:
     return path.lstrip("/")
 
 
 def plan_github_sync(findings: list[ReviewFinding], existing_comments: list[dict]) -> list[GitHubAction]:
-    actions: list[GitHubAction] = []
-    existing_by_fp: dict[str, dict] = {}
-
+    neutral_existing: list[ExistingComment] = []
     for comment in existing_comments:
         body = comment.get("body") or ""
-        fp = extract_fingerprint_from_body(body)
-        if fp:
-            existing_by_fp[fp] = comment
+        fingerprint = extract_fingerprint(body)
+        if fingerprint:
+            neutral_existing.append(
+                ExistingComment(
+                    comment_id=comment["id"],
+                    fingerprint=fingerprint,
+                    body=body,
+                    is_closed="<!-- openreview:status=closed -->" in body,
+                )
+            )
 
-    finding_by_fp = {finding.fingerprint: finding for finding in findings}
-
-    for fp, finding in finding_by_fp.items():
-        existing = existing_by_fp.get(fp)
-        desired = comment_for_finding(finding)
-
-        if not existing:
+    actions: list[GitHubAction] = []
+    for action in plan_comment_sync(findings, neutral_existing):
+        if action.kind == "create":
+            finding = action.finding
+            assert finding is not None
             actions.append(
                 GitHubAction(
                     kind="create_review_comment",
-                    fingerprint=fp,
-                    payload={"body": desired, "path": _path_for_github(finding.path), "line": finding.line},
+                    fingerprint=action.fingerprint,
+                    payload={"body": action.body, "path": _path_for_github(finding.path), "line": finding.line},
                 )
             )
-            continue
-
-        current = (existing.get("body") or "").strip()
-        if is_closed_comment(current) or current != desired.strip():
+        elif action.kind == "refresh":
             actions.append(
                 GitHubAction(
                     kind="update_review_comment",
-                    fingerprint=fp,
-                    payload={"comment_id": existing["id"], "body": desired},
+                    fingerprint=action.fingerprint,
+                    payload={"comment_id": action.comment_id, "body": action.body},
                 )
             )
-
-    for fp, comment in existing_by_fp.items():
-        if fp in finding_by_fp:
-            continue
-        body = comment.get("body") or ""
-        if is_closed_comment(body):
-            continue
-        actions.append(
-            GitHubAction(
-                kind="close_review_comment",
-                fingerprint=fp,
-                payload={"comment_id": comment["id"], "body": close_body(body)},
+        elif action.kind == "close":
+            actions.append(
+                GitHubAction(
+                    kind="close_review_comment",
+                    fingerprint=action.fingerprint,
+                    payload={"comment_id": action.comment_id, "body": action.body},
+                )
             )
-        )
 
     return actions
 
 
 def build_summary_comment(*, created: int, updated: int, closed: int, total_findings: int) -> str:
-    return (
-        f"{SUMMARY_MARKER}\n"
-        f"### openreview summary\n"
-        f"- findings considered: {total_findings}\n"
-        f"- comments created: {created}\n"
-        f"- comments updated: {updated}\n"
-        f"- comments closed: {closed}"
-    )
+    return build_summary_content(created=created, updated=updated, closed=closed, total_findings=total_findings)
 
 
 def find_existing_summary_comment(comments: list[dict]) -> dict | None:
-    for comment in comments:
-        if SUMMARY_MARKER in (comment.get("body") or ""):
-            return comment
-    return None
+    return find_summary_item(comments, lambda comment: comment.get("body") or "")

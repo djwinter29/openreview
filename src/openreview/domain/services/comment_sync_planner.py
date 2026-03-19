@@ -1,19 +1,31 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import Any
 
 from openreview.domain.entities.finding import ReviewFinding
 
-OPEN_STATUS = 1
-CLOSED_STATUS = 4
+CLOSED_MARKER = "<!-- openreview:status=closed -->"
 SUMMARY_MARKER = "<!-- openreview:summary -->"
 
 
 @dataclass
-class SyncAction:
+class ExistingComment:
+    comment_id: Any
+    fingerprint: str
+    body: str
+    is_closed: bool = False
+
+
+@dataclass
+class PlannedCommentAction:
     kind: str
     fingerprint: str
-    payload: dict
+    body: str = ""
+    comment_id: Any | None = None
+    finding: ReviewFinding | None = None
+    reopen: bool = False
 
 
 def marker_for_fingerprint(fingerprint: str) -> str:
@@ -33,92 +45,28 @@ def comment_for_finding(finding: ReviewFinding) -> str:
     )
 
 
-def extract_fingerprint(thread: dict) -> str | None:
-    comments = thread.get("comments") or []
-    for comment in comments:
-        content = comment.get("content") or ""
-        token = "<!-- openreview:fingerprint="
-        if token in content:
-            start = content.find(token) + len(token)
-            end = content.find("-->", start)
-            if end != -1:
-                return content[start:end].strip()
+def extract_fingerprint(body: str) -> str | None:
+    token = "<!-- openreview:fingerprint="
+    if token not in body:
+        return None
+    start = body.find(token) + len(token)
+    end = body.find("-->", start)
+    if end == -1:
+        return None
+    return body[start:end].strip()
+
+
+def close_comment_body(old_body: str) -> str:
+    if CLOSED_MARKER in old_body:
+        return old_body
+    return f"{old_body}\n\n{CLOSED_MARKER}\nResolved in latest revision."
+
+
+def find_summary_item(items: Iterable[Any], body_getter: Callable[[Any], str]) -> Any | None:
+    for item in items:
+        if SUMMARY_MARKER in body_getter(item):
+            return item
     return None
-
-
-def plan_sync(findings: list[ReviewFinding], existing_threads: list[dict]) -> list[SyncAction]:
-    actions: list[SyncAction] = []
-    existing_by_fp: dict[str, dict] = {}
-
-    for thread in existing_threads:
-        fp = extract_fingerprint(thread)
-        if fp:
-            existing_by_fp[fp] = thread
-
-    finding_by_fp = {finding.fingerprint: finding for finding in findings}
-
-    for fp, finding in finding_by_fp.items():
-        existing = existing_by_fp.get(fp)
-        if not existing:
-            actions.append(
-                SyncAction(
-                    kind="create_thread",
-                    fingerprint=fp,
-                    payload={
-                        "comments": [
-                            {
-                                "parentCommentId": 0,
-                                "content": comment_for_finding(finding),
-                                "commentType": 1,
-                            }
-                        ],
-                        "status": OPEN_STATUS,
-                        "threadContext": {
-                            "filePath": finding.path,
-                            "rightFileStart": {"line": finding.line, "offset": 1},
-                            "rightFileEnd": {"line": finding.line, "offset": 1},
-                        },
-                    },
-                )
-            )
-            continue
-
-        current_status = int(existing.get("status") or OPEN_STATUS)
-        last_content = ((existing.get("comments") or [{}])[-1].get("content") or "").strip()
-        desired_content = comment_for_finding(finding).strip()
-
-        if current_status == CLOSED_STATUS:
-            actions.append(
-                SyncAction(
-                    kind="reopen_thread",
-                    fingerprint=fp,
-                    payload={"threadId": existing["id"], "status": OPEN_STATUS},
-                )
-            )
-
-        if desired_content != last_content:
-            actions.append(
-                SyncAction(
-                    kind="add_comment",
-                    fingerprint=fp,
-                    payload={"threadId": existing["id"], "content": desired_content},
-                )
-            )
-
-    for fp, thread in existing_by_fp.items():
-        if fp in finding_by_fp:
-            continue
-        current_status = int(thread.get("status") or OPEN_STATUS)
-        if current_status != CLOSED_STATUS:
-            actions.append(
-                SyncAction(
-                    kind="close_thread",
-                    fingerprint=fp,
-                    payload={"threadId": thread["id"], "status": CLOSED_STATUS},
-                )
-            )
-
-    return actions
 
 
 def build_summary_content(*, created: int, updated: int, closed: int, total_findings: int) -> str:
@@ -132,9 +80,53 @@ def build_summary_content(*, created: int, updated: int, closed: int, total_find
     )
 
 
-def find_summary_thread(threads: list[dict]) -> dict | None:
-    for thread in threads:
-        for comment in thread.get("comments") or []:
-            if SUMMARY_MARKER in (comment.get("content") or ""):
-                return thread
-    return None
+def plan_comment_sync(findings: list[ReviewFinding], existing_comments: list[ExistingComment]) -> list[PlannedCommentAction]:
+    actions: list[PlannedCommentAction] = []
+    existing_by_fp: dict[str, ExistingComment] = {}
+
+    for comment in existing_comments:
+        existing_by_fp[comment.fingerprint] = comment
+
+    finding_by_fp = {finding.fingerprint: finding for finding in findings}
+
+    for fp, finding in finding_by_fp.items():
+        existing = existing_by_fp.get(fp)
+        desired_content = comment_for_finding(finding)
+        if not existing:
+            actions.append(
+                PlannedCommentAction(
+                    kind="create",
+                    fingerprint=fp,
+                    body=desired_content,
+                    finding=finding,
+                )
+            )
+            continue
+
+        current_body = existing.body.strip()
+        if existing.is_closed or current_body != desired_content.strip():
+            actions.append(
+                PlannedCommentAction(
+                    kind="refresh",
+                    fingerprint=fp,
+                    comment_id=existing.comment_id,
+                    body=desired_content,
+                    finding=finding,
+                    reopen=existing.is_closed,
+                )
+            )
+
+    for fp, comment in existing_by_fp.items():
+        if fp in finding_by_fp:
+            continue
+        if not comment.is_closed:
+            actions.append(
+                PlannedCommentAction(
+                    kind="close",
+                    fingerprint=fp,
+                    comment_id=comment.comment_id,
+                    body=close_comment_body(comment.body),
+                )
+            )
+
+    return actions

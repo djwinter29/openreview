@@ -75,12 +75,16 @@ Fingerprints are used to reconnect newly generated findings to previously posted
 
 ### Sync action
 
-Sync planning converts desired findings and existing provider comments into provider-neutral or provider-specific actions such as:
+Sync planning now converts desired findings and normalized existing comments into provider-neutral actions first. SCM adapters then translate those neutral actions into Azure DevOps threads, GitHub review comments, or GitLab notes.
+
+The neutral planner currently covers lifecycle decisions such as:
 
 - create comment or thread
 - reopen a closed discussion
 - append an updated comment
 - close resolved feedback
+
+This split keeps lifecycle rules in one place while letting each provider keep only its transport-specific payload mapping.
 
 ## Extension Points
 

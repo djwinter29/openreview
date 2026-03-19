@@ -3,10 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.services.comment_sync_planner import comment_for_finding
-
-CLOSED_MARKER = "<!-- openreview:status=closed -->"
-SUMMARY_MARKER = "<!-- openreview:summary -->"
+from openreview.domain.services.comment_sync_planner import ExistingComment, build_summary_content, extract_fingerprint, find_summary_item, plan_comment_sync
 
 
 @dataclass
@@ -16,74 +13,48 @@ class GitLabAction:
     payload: dict
 
 
-def extract_fingerprint_from_body(body: str) -> str | None:
-    token = "<!-- openreview:fingerprint="
-    if token not in body:
-        return None
-    start = body.find(token) + len(token)
-    end = body.find("-->", start)
-    if end == -1:
-        return None
-    return body[start:end].strip()
-
-
-def is_closed_comment(body: str) -> bool:
-    return CLOSED_MARKER in body
-
-
-def close_body(old_body: str) -> str:
-    if CLOSED_MARKER in old_body:
-        return old_body
-    return f"{old_body}\n\n{CLOSED_MARKER}\nResolved in latest revision."
-
-
 def build_summary_note(*, created: int, updated: int, closed: int, total_findings: int) -> str:
-    return (
-        f"{SUMMARY_MARKER}\n"
-        f"### openreview summary\n"
-        f"- findings considered: {total_findings}\n"
-        f"- comments created: {created}\n"
-        f"- comments updated: {updated}\n"
-        f"- comments closed: {closed}"
-    )
+    return build_summary_content(created=created, updated=updated, closed=closed, total_findings=total_findings)
 
 
 def find_existing_summary_note(notes: list[dict]) -> dict | None:
-    for note in notes:
-        if SUMMARY_MARKER in (note.get("body") or ""):
-            return note
-    return None
+    return find_summary_item(notes, lambda note: note.get("body") or "")
 
 
 def plan_gitlab_sync(findings: list[ReviewFinding], existing_notes: list[dict]) -> list[GitLabAction]:
-    actions: list[GitLabAction] = []
-    existing_by_fp: dict[str, dict] = {}
-
+    neutral_existing: list[ExistingComment] = []
     for note in existing_notes:
         body = note.get("body") or ""
-        fp = extract_fingerprint_from_body(body)
-        if fp:
-            existing_by_fp[fp] = note
+        fingerprint = extract_fingerprint(body)
+        if fingerprint:
+            neutral_existing.append(
+                ExistingComment(
+                    comment_id=note["id"],
+                    fingerprint=fingerprint,
+                    body=body,
+                    is_closed="<!-- openreview:status=closed -->" in body,
+                )
+            )
 
-    finding_by_fp = {finding.fingerprint: finding for finding in findings}
-
-    for fp, finding in finding_by_fp.items():
-        existing = existing_by_fp.get(fp)
-        desired = comment_for_finding(finding)
-        if not existing:
-            actions.append(GitLabAction(kind="create_note", fingerprint=fp, payload={"body": desired}))
-            continue
-
-        current = (existing.get("body") or "").strip()
-        if is_closed_comment(current) or current != desired.strip():
-            actions.append(GitLabAction(kind="update_note", fingerprint=fp, payload={"note_id": existing["id"], "body": desired}))
-
-    for fp, note in existing_by_fp.items():
-        if fp in finding_by_fp:
-            continue
-        body = note.get("body") or ""
-        if is_closed_comment(body):
-            continue
-        actions.append(GitLabAction(kind="close_note", fingerprint=fp, payload={"note_id": note["id"], "body": close_body(body)}))
+    actions: list[GitLabAction] = []
+    for action in plan_comment_sync(findings, neutral_existing):
+        if action.kind == "create":
+            actions.append(GitLabAction(kind="create_note", fingerprint=action.fingerprint, payload={"body": action.body}))
+        elif action.kind == "refresh":
+            actions.append(
+                GitLabAction(
+                    kind="update_note",
+                    fingerprint=action.fingerprint,
+                    payload={"note_id": action.comment_id, "body": action.body},
+                )
+            )
+        elif action.kind == "close":
+            actions.append(
+                GitLabAction(
+                    kind="close_note",
+                    fingerprint=action.fingerprint,
+                    payload={"note_id": action.comment_id, "body": action.body},
+                )
+            )
 
     return actions

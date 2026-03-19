@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 
+from openreview.adapters.scm.runtime import DefaultSyncExecutor
 from openreview.application.services.finding_pipeline import parse_findings_payload
 from openreview.application.services.sync_orchestrator import (
     print_summary,
@@ -62,7 +63,13 @@ def execute_sync(
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
     )
-    planned, summary = sync_with_provider(options, pr_id, findings, dry_run=dry_run)
+    planned, summary = sync_with_provider(
+        options,
+        pr_id,
+        findings,
+        dry_run=dry_run,
+        sync_executor=DefaultSyncExecutor(),
+    )
     print_summary(
         raw_findings=None,
         filtered_findings=len(findings),

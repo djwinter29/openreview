@@ -1,5 +1,94 @@
-"""! Placeholder for higher-level review workflow coordination.
+"""! Application orchestration for the end-to-end review workflow."""
 
-This module is the application-layer extension point for future orchestration
-that spans multiple review agents or execution strategies.
-"""
+from __future__ import annotations
+
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+import typer
+from rich import print
+
+from openreview.config import OpenReviewConfig
+from openreview.domain.entities.changed_file import ChangedFile
+from openreview.domain.entities.finding import ReviewFinding
+from openreview.domain.services.finding_filter_service import (
+	apply_hunk_mapping,
+	cap_per_file,
+	filter_findings,
+	path_allowed,
+)
+from openreview.domain.services.line_mapping_service import changed_hunks
+from openreview.ports.scm import ChangedPathCollector, ProviderOptions
+from openreview.reviewers.registry import get_reviewer
+from openreview.reviewers.router import choose_reviewers
+
+
+@dataclass(frozen=True)
+class ReviewExecutionResult:
+	"""! Output of the review generation stage before sync is applied."""
+
+	findings: list[ReviewFinding]
+	raw_findings: int
+
+
+def execute_review(
+	*,
+	pr_id: int,
+	repo_root: Path,
+	base_ref: str,
+	config: OpenReviewConfig,
+	provider_options: ProviderOptions,
+	changed_path_collector: ChangedPathCollector,
+	api_key: str,
+	ai_provider: str,
+	ai_model: str,
+	ai_base_url: str | None,
+	max_files: int,
+	reviewer_strategy: str = "fixed",
+) -> ReviewExecutionResult:
+	"""! Execute changed-file discovery, reviewer invocation, and finding filtering."""
+
+	try:
+		changed_paths = changed_path_collector.collect_changed_paths(provider_options, pr_id, repo_root, base_ref)
+	except subprocess.CalledProcessError as err:
+		output = (err.output or "").strip()
+		msg = f"Unable to diff against base ref '{base_ref}'."
+		if output:
+			msg = f"{msg} git said: {output}"
+		raise typer.BadParameter(msg) from err
+
+	changed_paths = [
+		path for path in changed_paths if path_allowed(path, config.rules.include_paths, config.rules.exclude_paths)
+	]
+	files = [ChangedFile(path=path) for path in changed_paths[:max_files]]
+	print(f"Changed files considered: {len(files)}")
+
+	findings: list[ReviewFinding] = []
+	for reviewer_name in choose_reviewers(reviewer_strategy):
+		reviewer = get_reviewer(reviewer_name)
+		findings.extend(
+			reviewer.review_files(
+				api_key=api_key,
+				model=ai_model,
+				files=files,
+				repo_root=repo_root,
+				api_provider=ai_provider,
+				api_base_url=ai_base_url,
+			)
+		)
+
+	raw_findings = len(findings)
+	print(f"AI findings (raw): {raw_findings}")
+
+	try:
+		hunks = changed_hunks(repo_root, base_ref)
+	except subprocess.CalledProcessError as err:
+		raise typer.BadParameter(f"Unable to map changed hunks against '{base_ref}'.") from err
+
+	findings = apply_hunk_mapping(findings, hunks, config.rules.changed_lines_only)
+	findings = filter_findings(findings, config.rules.min_severity, config.rules.min_confidence)
+	findings = cap_per_file(findings, config.rules.max_comments_per_file)
+	findings = findings[: config.rules.max_comments]
+	print(f"AI findings (filtered): {len(findings)}")
+	return ReviewExecutionResult(findings=findings, raw_findings=raw_findings)

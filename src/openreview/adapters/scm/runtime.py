@@ -1,34 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import subprocess
+from pathlib import Path
 
 from openreview.adapters.scm.azure_devops import AzureDevOpsClient, AzureProvider
 from openreview.adapters.scm.github import GitHubClient, GitHubProvider
 from openreview.adapters.scm.gitlab import GitLabClient, GitLabProvider
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.ports.scm import ReviewProvider
-
-
-@dataclass
-class ProviderOptions:
-    provider: str
-    organization: str | None = None
-    project: str | None = None
-    repository_id: str | None = None
-    pat: str | None = None
-    github_owner: str | None = None
-    github_repo: str | None = None
-    github_token: str | None = None
-    gitlab_project_id: str | None = None
-    gitlab_token: str | None = None
-    gitlab_base_url: str = "https://gitlab.com/api/v4"
-
-
-class ProviderSyncError(RuntimeError):
-    def __init__(self, step: str, cause: Exception):
-        super().__init__(f"provider sync failed at {step}: {cause}")
-        self.step = step
-        self.cause = cause
+from openreview.ports.scm import ChangedPathCollector, ProviderOptions, ReviewProvider, SyncExecutionError, SyncExecutor
 
 
 def _required(value: str | None, env_or_name: str) -> str:
@@ -69,20 +48,60 @@ def build_provider(opts: ProviderOptions) -> ReviewProvider:
     raise ValueError("provider must be one of: azure|github|gitlab")
 
 
+def _git_changed_paths(repo_root: Path, base_ref: str) -> list[str]:
+    diff_out = subprocess.check_output(
+        ["git", "-C", str(repo_root), "diff", "--name-only", f"{base_ref}...HEAD"],
+        text=True,
+        stderr=subprocess.STDOUT,
+    )
+    return ["/" + path.strip() for path in diff_out.splitlines() if path.strip()]
+
+
+class DefaultChangedPathCollector(ChangedPathCollector):
+    """! Adapter-backed implementation of changed-file discovery."""
+
+    def collect_changed_paths(self, options: ProviderOptions, pr_id: int, repo_root: Path, base_ref: str) -> list[str]:
+        if options.provider == "azure":
+            client = AzureDevOpsClient(
+                organization=_required(options.organization, "AZDO_ORG"),
+                project=_required(options.project, "AZDO_PROJECT"),
+                repository_id=_required(options.repository_id, "AZDO_REPO_ID"),
+                pat=_required(options.pat, "AZDO_PAT"),
+            )
+            return client.get_changed_files_latest_iteration(pr_id)
+
+        return _git_changed_paths(repo_root, base_ref)
+
+
+class DefaultSyncExecutor(SyncExecutor):
+    """! Adapter-backed implementation of provider sync execution."""
+
+    def sync(
+        self,
+        options: ProviderOptions,
+        pr_id: int,
+        findings: list[ReviewFinding],
+        *,
+        dry_run: bool = False,
+    ) -> tuple[list[object], object]:
+        provider = build_provider(options)
+        return run_sync_pipeline(provider, pr_id, findings, dry_run=dry_run)
+
+
 def run_sync_pipeline(provider: ReviewProvider, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool = False):
     try:
         existing = provider.list_existing(pr_id)
     except Exception as exc:  # pragma: no cover
-        raise ProviderSyncError("list_existing", exc) from exc
+        raise SyncExecutionError("list_existing", exc) from exc
 
     try:
         actions = provider.plan(findings, existing)
     except Exception as exc:  # pragma: no cover
-        raise ProviderSyncError("plan", exc) from exc
+        raise SyncExecutionError("plan", exc) from exc
 
     try:
         summary = provider.apply(pr_id, actions, dry_run=dry_run)
     except Exception as exc:  # pragma: no cover
-        raise ProviderSyncError("apply", exc) from exc
+        raise SyncExecutionError("apply", exc) from exc
 
     return actions, summary

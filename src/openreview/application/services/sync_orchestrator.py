@@ -7,9 +7,8 @@ import json
 import typer
 from rich import print
 
-from openreview.adapters.scm.runtime import ProviderOptions, ProviderSyncError, build_provider, run_sync_pipeline
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.ports.scm import SyncSummary
+from openreview.ports.scm import ProviderOptions, SyncExecutionError, SyncExecutor, SyncSummary
 
 
 def env_or_option(value: str | None, env_name: str) -> str:
@@ -121,16 +120,22 @@ def print_summary(
     print(f"- skipped: {max(0, planned_actions - summary.applied)}")
 
 
-def sync_with_provider(options: ProviderOptions, pr_id: int, findings: list[ReviewFinding], *, dry_run: bool) -> tuple[int, SyncSummary]:
+def sync_with_provider(
+    options: ProviderOptions,
+    pr_id: int,
+    findings: list[ReviewFinding],
+    *,
+    dry_run: bool,
+    sync_executor: SyncExecutor,
+) -> tuple[int, SyncSummary]:
     """! Execute provider sync and print the planned actions.
 
     @return A tuple containing the number of planned actions and the provider summary.
     """
 
-    provider_impl = build_provider(options)
     try:
-        actions, summary = run_sync_pipeline(provider_impl, pr_id, findings, dry_run=dry_run)
-    except ProviderSyncError as err:
+        actions, summary = sync_executor.sync(options, pr_id, findings, dry_run=dry_run)
+    except SyncExecutionError as err:
         raise typer.BadParameter(str(err)) from err
 
     print(f"Planned actions: {len(actions)}")

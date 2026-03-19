@@ -1,10 +1,11 @@
 from openreview.adapters.scm.azure_devops.sync import (
+    CLOSED_STATUS,
+    OPEN_STATUS,
     build_azure_summary,
     find_azure_summary_thread,
     plan_azure_sync,
 )
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.services.comment_sync_planner import CLOSED_STATUS, OPEN_STATUS
 
 
 def finding(fp: str, msg: str = "x") -> ReviewFinding:
