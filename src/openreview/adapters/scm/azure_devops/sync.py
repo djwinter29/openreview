@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from openreview.domain.services.comment_sync_planner import ExistingComment, PlannedCommentAction, build_summary_content, extract_fingerprint, find_summary_item, plan_comment_sync
+from openreview.ports.scm import ExistingReviewComment
 
 OPEN_STATUS = 1
 CLOSED_STATUS = 4
@@ -20,14 +21,14 @@ def _body_from_thread(thread: dict) -> str:
     return (comments[-1].get("content") or "") if comments else ""
 
 
-def _normalize_threads(existing_threads: list[dict]) -> list[ExistingComment]:
-    comments: list[ExistingComment] = []
+def normalize_azure_threads(existing_threads: list[dict]) -> list[ExistingReviewComment]:
+    comments: list[ExistingReviewComment] = []
     for thread in existing_threads:
         body = _body_from_thread(thread)
         fingerprint = extract_fingerprint(body)
         if fingerprint:
             comments.append(
-                ExistingComment(
+                ExistingReviewComment(
                     comment_id=thread["id"],
                     fingerprint=fingerprint,
                     body=body,
@@ -85,8 +86,17 @@ def _to_azure_actions(planned_actions: list[PlannedCommentAction]) -> list[Azure
     return translated
 
 
-def plan_azure_sync(findings: list, existing_threads: list[dict]) -> list[AzureAction]:
-    return _to_azure_actions(plan_comment_sync(findings, _normalize_threads(existing_threads)))
+def plan_azure_sync(findings: list, existing_comments: list[ExistingReviewComment]) -> list[AzureAction]:
+    neutral_existing = [
+        ExistingComment(
+            comment_id=comment.comment_id,
+            fingerprint=comment.fingerprint,
+            body=comment.body,
+            is_closed=comment.is_closed,
+        )
+        for comment in existing_comments
+    ]
+    return _to_azure_actions(plan_comment_sync(findings, neutral_existing))
 
 
 def build_azure_summary(*, created: int, updated: int, closed: int, total_findings: int) -> str:

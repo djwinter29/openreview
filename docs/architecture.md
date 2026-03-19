@@ -9,6 +9,16 @@ This document describes the current runtime structure of `openreview` after the 
 - make SCM and model integrations replaceable
 - support additional review agents without rewriting orchestration
 
+## Current Architecture Decisions
+
+The following decisions are now the intended direction for the next phase of the design:
+
+- SCM providers should converge on one typed review-state model at the port boundary
+- provider-specific flexibility should remain in translation and transport details, not in the core SCM contracts
+- the reviewer layer should stay intentionally simple until there is a second real reviewer with distinct behavior and configuration needs
+
+These decisions are meant to keep the current architecture moving toward stronger contracts without introducing speculative abstractions too early.
+
 ## Package Layout
 
 - `src/openreview/application/`
@@ -92,6 +102,16 @@ This split keeps lifecycle rules in one place while letting each provider keep o
 - add new review agents under `reviewers/agents/`
 - add new model providers under `adapters/model/`
 - expand routing logic in `reviewers/router.py` when multiple agents become active
+
+## Near-Term Direction
+
+### SCM boundary
+
+The near-term goal is to keep converging all SCM providers on a single typed review-state model and stronger typed action contracts at the port boundary. Provider-specific API payloads should remain isolated inside adapter translation layers.
+
+### Reviewer subsystem
+
+The reviewer subsystem should remain deliberately simple until a second real reviewer exists. That means the current registry and routing structure should support one built-in reviewer cleanly, but it should avoid speculative complexity until multi-reviewer execution is a concrete product need.
 
 ## Test Layout
 

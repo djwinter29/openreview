@@ -1,28 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from openreview.adapters.scm.azure_devops.client import AzureDevOpsClient
 from openreview.adapters.scm.azure_devops.sync import (
     build_azure_summary,
     find_azure_summary_thread,
+    normalize_azure_threads,
     plan_azure_sync,
 )
-from openreview.ports.scm import SyncSummary
+from openreview.ports.scm import ExistingReviewComment, ProviderAction, SyncSummary
 
 
 @dataclass
 class AzureProvider:
     client: AzureDevOpsClient
 
-    def list_existing(self, pr_id: int) -> list[dict[str, Any]]:
-        return self.client.get_pull_request_threads(pr_id)
+    def list_existing(self, pr_id: int) -> list[ExistingReviewComment]:
+        return normalize_azure_threads(self.client.get_pull_request_threads(pr_id))
 
-    def plan(self, findings, existing):
+    def plan(self, findings, existing: list[ExistingReviewComment]):
         return plan_azure_sync(findings, existing)
 
-    def apply(self, pr_id: int, actions: list[Any], *, dry_run: bool = False) -> SyncSummary:
+    def apply(self, pr_id: int, actions: list[ProviderAction], *, dry_run: bool = False) -> SyncSummary:
         created = sum(1 for action in actions if action.kind == "create_thread")
         updated = sum(1 for action in actions if action.kind in {"add_comment", "reopen_thread"})
         closed = sum(1 for action in actions if action.kind == "close_thread")

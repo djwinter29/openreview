@@ -7,7 +7,7 @@ from openreview.adapters.scm.azure_devops import AzureDevOpsClient, AzureProvide
 from openreview.adapters.scm.github import GitHubClient, GitHubProvider
 from openreview.adapters.scm.gitlab import GitLabClient, GitLabProvider
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.ports.scm import ChangedPathCollector, ProviderOptions, ReviewProvider, SyncExecutionError, SyncExecutor
+from openreview.ports.scm import ChangedPathCollector, ProviderAction, ProviderOptions, ReviewProvider, SyncExecutionError, SyncExecutor, SyncSummary
 
 
 def _required(value: str | None, env_or_name: str) -> str:
@@ -83,7 +83,7 @@ class DefaultSyncExecutor(SyncExecutor):
         findings: list[ReviewFinding],
         *,
         dry_run: bool = False,
-    ) -> tuple[list[object], object]:
+    ) -> tuple[list[ProviderAction], SyncSummary]:
         provider = build_provider(options)
         return run_sync_pipeline(provider, pr_id, findings, dry_run=dry_run)
 

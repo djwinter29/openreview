@@ -1,28 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from openreview.adapters.scm.github.client import GitHubClient
 from openreview.adapters.scm.github.sync import (
     build_summary_comment,
     find_existing_summary_comment,
+    normalize_github_comments,
     plan_github_sync,
 )
-from openreview.ports.scm import SyncSummary
+from openreview.ports.scm import ExistingReviewComment, ProviderAction, SyncSummary
 
 
 @dataclass
 class GitHubProvider:
     client: GitHubClient
 
-    def list_existing(self, pr_id: int) -> list[dict[str, Any]]:
-        return self.client.get_review_comments(pr_id) + self.client.get_issue_comments(pr_id)
+    def list_existing(self, pr_id: int) -> list[ExistingReviewComment]:
+        return normalize_github_comments(self.client.get_review_comments(pr_id) + self.client.get_issue_comments(pr_id))
 
-    def plan(self, findings, existing):
+    def plan(self, findings, existing: list[ExistingReviewComment]):
         return plan_github_sync(findings, existing)
 
-    def apply(self, pr_id: int, actions: list[Any], *, dry_run: bool = False) -> SyncSummary:
+    def apply(self, pr_id: int, actions: list[ProviderAction], *, dry_run: bool = False) -> SyncSummary:
         created = sum(1 for action in actions if action.kind == "create_review_comment")
         updated = sum(1 for action in actions if action.kind == "update_review_comment")
         closed = sum(1 for action in actions if action.kind == "close_review_comment")

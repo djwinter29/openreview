@@ -1,4 +1,4 @@
-from openreview.adapters.scm.github.sync import plan_github_sync
+from openreview.adapters.scm.github.sync import normalize_github_comments, plan_github_sync
 from openreview.domain.entities.finding import ReviewFinding
 
 
@@ -11,7 +11,7 @@ def test_create_update_close_flow() -> None:
     assert len(actions) == 1 and actions[0].kind == "create_review_comment"
     assert actions[0].payload["path"] == "a.c"
 
-    existing = [{"id": 10, "body": "<!-- openreview:fingerprint=f1 -->\nold"}]
+    existing = normalize_github_comments([{"id": 10, "body": "<!-- openreview:fingerprint=f1 -->\nold"}])
     actions = plan_github_sync([rf("f1", "new message")], existing)
     assert any(action.kind == "update_review_comment" for action in actions)
 

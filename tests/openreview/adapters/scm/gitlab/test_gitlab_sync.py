@@ -1,4 +1,4 @@
-from openreview.adapters.scm.gitlab.sync import build_summary_note, find_existing_summary_note, plan_gitlab_sync
+from openreview.adapters.scm.gitlab.sync import build_summary_note, find_existing_summary_note, normalize_gitlab_notes, plan_gitlab_sync
 from openreview.domain.entities.finding import ReviewFinding
 
 
@@ -10,7 +10,7 @@ def test_gitlab_plan_create_update_close():
     actions = plan_gitlab_sync([rf("f1")], [])
     assert len(actions) == 1 and actions[0].kind == "create_note"
 
-    existing = [{"id": 10, "body": "<!-- openreview:fingerprint=f1 -->\nold"}]
+    existing = normalize_gitlab_notes([{"id": 10, "body": "<!-- openreview:fingerprint=f1 -->\nold"}])
     actions = plan_gitlab_sync([rf("f1", "new")], existing)
     assert any(action.kind == "update_note" for action in actions)
 
