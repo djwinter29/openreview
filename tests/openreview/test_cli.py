@@ -27,7 +27,10 @@ def test_sync_forwards_summary_json_flag(monkeypatch) -> None:
     def _fake_execute_sync(**kwargs):
         called.update(kwargs)
 
+    composition = type("SyncComposition", (), {"provider_options": object(), "sync_executor": object()})()
+
     monkeypatch.setattr(cli_mod, "execute_sync", _fake_execute_sync)
+    monkeypatch.setattr(cli_mod, "build_sync_composition", lambda **kwargs: composition)
 
     result = runner.invoke(
         app,
@@ -53,7 +56,20 @@ def test_run_forwards_summary_json_flag(monkeypatch) -> None:
     def _fake_execute_run(**kwargs):
         called.update(kwargs)
 
+    composition = type(
+        "RunComposition",
+        (),
+        {
+            "provider_options": object(),
+            "changed_path_collector": object(),
+            "sync_executor": object(),
+            "model_gateway": object(),
+            "api_key": "key",
+        },
+    )()
+
     monkeypatch.setattr(cli_mod, "execute_run", _fake_execute_run)
+    monkeypatch.setattr(cli_mod, "build_run_composition", lambda **kwargs: composition)
 
     result = runner.invoke(
         app,

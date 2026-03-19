@@ -9,7 +9,8 @@ from openreview.adapters.scm.github.sync import (
     normalize_github_comments,
     plan_github_sync,
 )
-from openreview.ports.scm import ExistingReviewComment, ProviderAction, SyncSummary
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment, SyncAction
+from openreview.ports.scm import ExistingReviewComment, SyncSummary
 
 
 @dataclass
@@ -22,10 +23,10 @@ class GitHubProvider:
     def plan(self, findings, existing: list[ExistingReviewComment]):
         return plan_github_sync(findings, existing)
 
-    def apply(self, pr_id: int, actions: list[ProviderAction], *, dry_run: bool = False) -> SyncSummary:
-        created = sum(1 for action in actions if action.kind == "create_review_comment")
-        updated = sum(1 for action in actions if action.kind == "update_review_comment")
-        closed = sum(1 for action in actions if action.kind == "close_review_comment")
+    def apply(self, pr_id: int, actions: list[SyncAction], *, dry_run: bool = False) -> SyncSummary:
+        created = sum(1 for action in actions if isinstance(action, CreateFindingComment))
+        updated = sum(1 for action in actions if isinstance(action, RefreshFindingComment))
+        closed = sum(1 for action in actions if isinstance(action, CloseFindingComment))
         if dry_run:
             return SyncSummary(planned=len(actions), applied=0, created=created, updated=updated, closed=closed)
 
@@ -34,22 +35,24 @@ class GitHubProvider:
 
         applied = 0
         for action in actions:
-            if action.kind == "create_review_comment":
+            if isinstance(action, CreateFindingComment):
+                target = action.target
+                assert target is not None
                 try:
                     self.client.create_review_comment(
                         pr_number=pr_id,
-                        body=action.payload["body"],
+                        body=action.body,
                         commit_id=head_sha,
-                        path=action.payload["path"],
-                        line=action.payload["line"],
+                        path=target.path.lstrip("/"),
+                        line=target.line,
                     )
                 except Exception:
-                    self.client.create_issue_comment(pr_id, action.payload["body"])
+                    self.client.create_issue_comment(pr_id, action.body)
             else:
                 try:
-                    self.client.update_review_comment(action.payload["comment_id"], action.payload["body"])
+                    self.client.update_review_comment(action.comment_id, action.body)
                 except Exception:
-                    self.client.update_issue_comment(action.payload["comment_id"], action.payload["body"])
+                    self.client.update_issue_comment(action.comment_id, action.body)
             applied += 1
 
         summary = build_summary_comment(created=created, updated=updated, closed=closed, total_findings=created + updated)

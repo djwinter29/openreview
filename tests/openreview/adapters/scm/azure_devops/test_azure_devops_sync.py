@@ -7,6 +7,7 @@ from openreview.adapters.scm.azure_devops.sync import (
     plan_azure_sync,
 )
 from openreview.domain.entities.finding import ReviewFinding
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment
 from openreview.ports.scm import ExistingReviewComment
 
 
@@ -22,20 +23,20 @@ def thread(thread_id: int, fp: str, status: int = OPEN_STATUS, content: str | No
 def test_plan_creates_when_missing() -> None:
     actions = plan_azure_sync([finding("f1")], [])
     assert len(actions) == 1
-    assert actions[0].kind == "create_thread"
+    assert isinstance(actions[0], CreateFindingComment)
 
 
 def test_plan_closes_when_gone() -> None:
     actions = plan_azure_sync([], normalize_azure_threads([thread(1, "f1")]))
     assert len(actions) == 1
-    assert actions[0].kind == "close_thread"
+    assert isinstance(actions[0], CloseFindingComment)
 
 
 def test_plan_reopens_and_updates_changed() -> None:
     actions = plan_azure_sync([finding("f1", msg="new")], normalize_azure_threads([thread(1, "f1", status=CLOSED_STATUS)]))
-    kinds = [action.kind for action in actions]
-    assert "reopen_thread" in kinds
-    assert "add_comment" in kinds
+    assert len(actions) == 1
+    assert isinstance(actions[0], RefreshFindingComment)
+    assert actions[0].reopen is True
 
 
 def test_normalize_threads_extracts_existing_comment_state() -> None:

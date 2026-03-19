@@ -5,6 +5,7 @@ This document describes the current runtime structure of `openreview` after the 
 ## Design Goals
 
 - keep the CLI thin
+- keep runtime wiring in an outer composition layer
 - isolate business logic from provider-specific APIs
 - make SCM and model integrations replaceable
 - support additional review agents without rewriting orchestration
@@ -14,7 +15,9 @@ This document describes the current runtime structure of `openreview` after the 
 The following decisions are now the intended direction for the next phase of the design:
 
 - SCM providers should converge on one typed review-state model at the port boundary
+- sync planning should use typed provider-neutral action models across the SCM boundary
 - provider-specific flexibility should remain in translation and transport details, not in the core SCM contracts
+- reviewers should depend on an injected model gateway through the model port rather than importing adapter runtimes directly
 - the reviewer layer should stay intentionally simple until there is a second real reviewer with distinct behavior and configuration needs
 
 These decisions are meant to keep the current architecture moving toward stronger contracts without introducing speculative abstractions too early.
@@ -24,6 +27,8 @@ These decisions are meant to keep the current architecture moving toward stronge
 - `src/openreview/application/`
   - CLI-facing commands and orchestration helpers
   - coordinates workflows such as `run` and `sync`
+- `src/openreview/bootstrap.py`
+  - outer composition layer for provider selection, changed-file strategy selection, and model gateway wiring
 - `src/openreview/domain/`
   - core entities such as findings and diff hunks
   - provider-neutral business rules for filtering, fingerprinting, mapping, and sync planning
@@ -85,7 +90,7 @@ Fingerprints are used to reconnect newly generated findings to previously posted
 
 ### Sync action
 
-Sync planning now converts desired findings and normalized existing comments into provider-neutral actions first. SCM adapters then translate those neutral actions into Azure DevOps threads, GitHub review comments, or GitLab notes.
+Sync planning now converts desired findings and normalized existing comments into typed provider-neutral actions first. SCM adapters then translate those neutral actions into Azure DevOps threads, GitHub review comments, or GitLab notes.
 
 The neutral planner currently covers lifecycle decisions such as:
 
@@ -94,7 +99,11 @@ The neutral planner currently covers lifecycle decisions such as:
 - append an updated comment
 - close resolved feedback
 
-This split keeps lifecycle rules in one place while letting each provider keep only its transport-specific payload mapping.
+This split keeps lifecycle rules in one place while letting each provider keep only its transport-specific API mapping.
+
+### Composition layer
+
+The outer composition layer resolves environment-backed provider options, chooses the changed-file collection strategy, constructs the provider implementation used for sync, and injects the model gateway used by reviewers. Application services receive these dependencies explicitly and do not instantiate concrete adapters.
 
 ## Extension Points
 

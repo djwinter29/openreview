@@ -8,65 +8,8 @@ import typer
 from rich import print
 
 from openreview.domain.entities.finding import ReviewFinding
+from openreview.domain.entities.sync_action import sync_action_kind
 from openreview.ports.scm import ProviderOptions, SyncExecutionError, SyncExecutor, SyncSummary
-
-
-def env_or_option(value: str | None, env_name: str) -> str:
-    """! Resolve a required value from a CLI option or environment variable."""
-
-    import os
-
-    if value:
-        return value
-    env_val = os.getenv(env_name)
-    if env_val:
-        return env_val
-    raise typer.BadParameter(f"Missing value. Provide --{env_name.lower().replace('_', '-')} or set {env_name}")
-
-
-def provider_options(
-    *,
-    provider: str,
-    organization: str | None,
-    project: str | None,
-    repository_id: str | None,
-    pat: str | None,
-    github_owner: str | None,
-    github_repo: str | None,
-    github_token: str | None,
-    gitlab_project_id: str | None,
-    gitlab_token: str | None,
-    gitlab_base_url: str,
-) -> ProviderOptions:
-    """! Build normalized SCM provider options from CLI inputs and environment."""
-
-    return ProviderOptions(
-        provider=provider,
-        organization=env_or_option(organization, "AZDO_ORG") if provider == "azure" else organization,
-        project=env_or_option(project, "AZDO_PROJECT") if provider == "azure" else project,
-        repository_id=env_or_option(repository_id, "AZDO_REPO_ID") if provider == "azure" else repository_id,
-        pat=env_or_option(pat, "AZDO_PAT") if provider == "azure" else pat,
-        github_owner=env_or_option(github_owner, "GITHUB_OWNER") if provider == "github" else github_owner,
-        github_repo=env_or_option(github_repo, "GITHUB_REPO") if provider == "github" else github_repo,
-        github_token=env_or_option(github_token, "GITHUB_TOKEN") if provider == "github" else github_token,
-        gitlab_project_id=env_or_option(gitlab_project_id, "GITLAB_PROJECT_ID") if provider == "gitlab" else gitlab_project_id,
-        gitlab_token=env_or_option(gitlab_token, "GITLAB_TOKEN") if provider == "gitlab" else gitlab_token,
-        gitlab_base_url=gitlab_base_url,
-    )
-
-
-def model_api_key(provider: str, ai_api_key: str | None, openai_api_key: str | None) -> str:
-    """! Resolve the API key required for the selected model provider."""
-
-    if ai_api_key:
-        return ai_api_key
-    if provider == "openai":
-        return env_or_option(openai_api_key, "OPENAI_API_KEY")
-    if provider in {"claude", "anthropic"}:
-        return env_or_option(None, "ANTHROPIC_API_KEY")
-    if provider == "deepseek":
-        return env_or_option(None, "DEEPSEEK_API_KEY")
-    raise typer.BadParameter("ai-provider must be one of: openai|claude|deepseek")
 
 
 def summary_payload(*, raw_findings: int | None, filtered_findings: int | None, planned_actions: int, summary: SyncSummary) -> dict[str, int]:
@@ -140,8 +83,7 @@ def sync_with_provider(
 
     print(f"Planned actions: {len(actions)}")
     for action in actions:
-        fingerprint = getattr(action, "fingerprint", "n/a")
-        print(f"- {action.kind} [{fingerprint}]")
+        print(f"- {sync_action_kind(action)} [{action.fingerprint}]")
 
     print(f"Applied actions: {summary.applied}")
     return len(actions), summary

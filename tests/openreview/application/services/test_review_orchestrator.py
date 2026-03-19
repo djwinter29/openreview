@@ -77,6 +77,7 @@ def test_execute_review_uses_router_and_filters_findings(monkeypatch, tmp_path: 
         config=config,
         provider_options=ProviderOptions(provider="github"),
         changed_path_collector=collector,
+        model_gateway=object(),
         api_key="key",
         ai_provider="openai",
         ai_model="gpt-4.1-mini",
@@ -87,6 +88,7 @@ def test_execute_review_uses_router_and_filters_findings(monkeypatch, tmp_path: 
     assert result.raw_findings == 2
     assert len(result.findings) == 1
     assert result.findings[0].fingerprint == "fp-1"
+    assert reviewer.calls[0]["model_gateway"] is not None
     assert reviewer.calls[0]["files"][0].path == "/src/a.py"
     assert len(reviewer.calls[0]["files"]) == 1
     assert collector.calls[0][1] == 123

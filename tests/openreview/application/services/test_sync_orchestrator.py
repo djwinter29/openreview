@@ -4,6 +4,7 @@ import pytest
 
 from openreview.application.services.sync_orchestrator import print_summary, sync_with_provider
 from openreview.domain.entities.finding import ReviewFinding
+from openreview.domain.entities.sync_action import CreateFindingComment
 from openreview.ports.scm import ProviderOptions, SyncExecutionError, SyncSummary
 
 
@@ -48,7 +49,7 @@ class DummySyncExecutor:
         self.calls.append((options, pr_id, findings, dry_run))
         if self.error is not None:
             raise self.error
-        return ([type("Action", (), {"kind": "create", "fingerprint": "fp-1"})()], SyncSummary(planned=1, applied=1, created=1, updated=0, closed=0))
+        return ([CreateFindingComment(fingerprint="fp-1", body="body")], SyncSummary(planned=1, applied=1, created=1, updated=0, closed=0))
 
 
 def test_sync_with_provider_uses_injected_executor() -> None:

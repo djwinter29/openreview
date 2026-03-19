@@ -1,19 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from openreview.domain.services.comment_sync_planner import ExistingComment, PlannedCommentAction, build_summary_content, extract_fingerprint, find_summary_item, plan_comment_sync
+from openreview.domain.entities.sync_action import SyncAction
+from openreview.domain.services.comment_sync_planner import ExistingComment, build_summary_content, extract_fingerprint, find_summary_item, plan_comment_sync
 from openreview.ports.scm import ExistingReviewComment
 
 OPEN_STATUS = 1
 CLOSED_STATUS = 4
-
-
-@dataclass
-class AzureAction:
-    kind: str
-    fingerprint: str
-    payload: dict
 
 
 def _body_from_thread(thread: dict) -> str:
@@ -38,55 +30,7 @@ def normalize_azure_threads(existing_threads: list[dict]) -> list[ExistingReview
     return comments
 
 
-def _to_azure_actions(planned_actions: list[PlannedCommentAction]) -> list[AzureAction]:
-    translated: list[AzureAction] = []
-    for action in planned_actions:
-        if action.kind == "create":
-            finding = action.finding
-            assert finding is not None
-            translated.append(
-                AzureAction(
-                    kind="create_thread",
-                    fingerprint=action.fingerprint,
-                    payload={
-                        "comments": [{"parentCommentId": 0, "content": action.body, "commentType": 1}],
-                        "status": OPEN_STATUS,
-                        "threadContext": {
-                            "filePath": finding.path,
-                            "rightFileStart": {"line": finding.line, "offset": 1},
-                            "rightFileEnd": {"line": finding.line, "offset": 1},
-                        },
-                    },
-                )
-            )
-        elif action.kind == "refresh":
-            if action.reopen:
-                translated.append(
-                    AzureAction(
-                        kind="reopen_thread",
-                        fingerprint=action.fingerprint,
-                        payload={"threadId": action.comment_id, "status": OPEN_STATUS},
-                    )
-                )
-            translated.append(
-                AzureAction(
-                    kind="add_comment",
-                    fingerprint=action.fingerprint,
-                    payload={"threadId": action.comment_id, "content": action.body},
-                )
-            )
-        elif action.kind == "close":
-            translated.append(
-                AzureAction(
-                    kind="close_thread",
-                    fingerprint=action.fingerprint,
-                    payload={"threadId": action.comment_id, "status": CLOSED_STATUS},
-                )
-            )
-    return translated
-
-
-def plan_azure_sync(findings: list, existing_comments: list[ExistingReviewComment]) -> list[AzureAction]:
+def plan_azure_sync(findings: list, existing_comments: list[ExistingReviewComment]) -> list[SyncAction]:
     neutral_existing = [
         ExistingComment(
             comment_id=comment.comment_id,
@@ -96,7 +40,7 @@ def plan_azure_sync(findings: list, existing_comments: list[ExistingReviewCommen
         )
         for comment in existing_comments
     ]
-    return _to_azure_actions(plan_comment_sync(findings, neutral_existing))
+    return plan_comment_sync(findings, neutral_existing)
 
 
 def build_azure_summary(*, created: int, updated: int, closed: int, total_findings: int) -> str:

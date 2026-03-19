@@ -19,6 +19,7 @@ from openreview.domain.services.finding_filter_service import (
 	path_allowed,
 )
 from openreview.domain.services.line_mapping_service import changed_hunks
+from openreview.ports.model import ModelPort
 from openreview.ports.scm import ChangedPathCollector, ProviderOptions
 from openreview.reviewers.registry import get_reviewer
 from openreview.reviewers.router import choose_reviewers
@@ -40,6 +41,7 @@ def execute_review(
 	config: OpenReviewConfig,
 	provider_options: ProviderOptions,
 	changed_path_collector: ChangedPathCollector,
+	model_gateway: ModelPort,
 	api_key: str,
 	ai_provider: str,
 	ai_model: str,
@@ -69,6 +71,7 @@ def execute_review(
 		reviewer = get_reviewer(reviewer_name)
 		findings.extend(
 			reviewer.review_files(
+				model_gateway=model_gateway,
 				api_key=api_key,
 				model=ai_model,
 				files=files,

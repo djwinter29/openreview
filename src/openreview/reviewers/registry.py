@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from openreview.reviewers.base import ReviewAgentSpec
+from openreview.ports.model import ModelPort
 from openreview.reviewers.agents.general_code_review import review_changed_files
 
 
@@ -19,6 +20,7 @@ class FunctionReviewer:
     def review_files(
         self,
         *,
+        model_gateway: ModelPort,
         api_key: str,
         model: str,
         files: list,
@@ -28,6 +30,7 @@ class FunctionReviewer:
         api_base_url: str | None = None,
     ):
         return self.review_fn(
+            model_gateway=model_gateway,
             api_key=api_key,
             model=model,
             files=files,

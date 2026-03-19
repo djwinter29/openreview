@@ -8,8 +8,7 @@ from pathlib import Path
 from openreview.domain.entities.changed_file import ChangedFile
 from openreview.domain.entities.finding import ReviewFinding
 from openreview.domain.services.fingerprint_service import build_fingerprint
-from openreview.ports.model import ModelRequest
-from openreview.adapters.model.runtime import generate_text
+from openreview.ports.model import ModelPort, ModelRequest
 
 
 def _build_prompt(path: str, content: str) -> str:
@@ -41,6 +40,7 @@ def _unwrap_json_text(text: str) -> str:
 
 
 def _call_model_json(
+    model_gateway: ModelPort,
     api_provider: str,
     api_key: str,
     model: str,
@@ -49,7 +49,7 @@ def _call_model_json(
 ) -> list[dict]:
     """! Call the configured model provider and parse the JSON array response."""
 
-    response = generate_text(
+    response = model_gateway.generate(
         ModelRequest(
             provider=api_provider,
             model=model,
@@ -69,14 +69,15 @@ def _call_model_json(
     return parsed if isinstance(parsed, list) else []
 
 
-def _call_openai_json(api_key: str, model: str, prompt: str) -> list[dict]:
+def _call_openai_json(model_gateway: ModelPort, api_key: str, model: str, prompt: str) -> list[dict]:
     """! Convenience wrapper for OpenAI-compatible JSON review calls."""
 
-    return _call_model_json("openai", api_key, model, prompt)
+    return _call_model_json(model_gateway, "openai", api_key, model, prompt)
 
 
 def review_changed_files(
     *,
+    model_gateway: ModelPort,
     api_key: str,
     model: str,
     files: list[ChangedFile],
@@ -103,9 +104,9 @@ def review_changed_files(
         snippet = content[:max_file_chars]
         prompt = _build_prompt(file.path, snippet)
         if api_provider == "openai" and api_base_url is None:
-            items = _call_openai_json(api_key, model, prompt)
+            items = _call_openai_json(model_gateway, api_key, model, prompt)
         else:
-            items = _call_model_json(api_provider, api_key, model, prompt, api_base_url)
+            items = _call_model_json(model_gateway, api_provider, api_key, model, prompt, api_base_url)
 
         for item in items:
             try:

@@ -9,7 +9,8 @@ from openreview.adapters.scm.azure_devops.sync import (
     normalize_azure_threads,
     plan_azure_sync,
 )
-from openreview.ports.scm import ExistingReviewComment, ProviderAction, SyncSummary
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment, SyncAction
+from openreview.ports.scm import ExistingReviewComment, SyncSummary
 
 
 @dataclass
@@ -22,21 +23,36 @@ class AzureProvider:
     def plan(self, findings, existing: list[ExistingReviewComment]):
         return plan_azure_sync(findings, existing)
 
-    def apply(self, pr_id: int, actions: list[ProviderAction], *, dry_run: bool = False) -> SyncSummary:
-        created = sum(1 for action in actions if action.kind == "create_thread")
-        updated = sum(1 for action in actions if action.kind in {"add_comment", "reopen_thread"})
-        closed = sum(1 for action in actions if action.kind == "close_thread")
+    def apply(self, pr_id: int, actions: list[SyncAction], *, dry_run: bool = False) -> SyncSummary:
+        created = sum(1 for action in actions if isinstance(action, CreateFindingComment))
+        updated = sum(1 for action in actions if isinstance(action, RefreshFindingComment))
+        closed = sum(1 for action in actions if isinstance(action, CloseFindingComment))
         if dry_run:
             return SyncSummary(planned=len(actions), applied=0, created=created, updated=updated, closed=closed)
 
         applied = 0
         for action in actions:
-            if action.kind == "create_thread":
-                self.client.create_thread(pr_id, action.payload)
-            elif action.kind in {"reopen_thread", "close_thread"}:
-                self.client.update_thread(pr_id, action.payload["threadId"], {"status": action.payload["status"]})
-            elif action.kind == "add_comment":
-                self.client.create_comment(pr_id, action.payload["threadId"], action.payload["content"])
+            if isinstance(action, CreateFindingComment):
+                target = action.target
+                assert target is not None
+                self.client.create_thread(
+                    pr_id,
+                    {
+                        "comments": [{"parentCommentId": 0, "content": action.body, "commentType": 1}],
+                        "status": 1,
+                        "threadContext": {
+                            "filePath": target.path,
+                            "rightFileStart": {"line": target.line, "offset": 1},
+                            "rightFileEnd": {"line": target.line, "offset": 1},
+                        },
+                    },
+                )
+            elif isinstance(action, RefreshFindingComment):
+                if action.reopen:
+                    self.client.update_thread(pr_id, action.comment_id, {"status": 1})
+                self.client.create_comment(pr_id, action.comment_id, action.body)
+            elif isinstance(action, CloseFindingComment):
+                self.client.update_thread(pr_id, action.comment_id, {"status": 4})
             applied += 1
 
         summary = build_azure_summary(created=created, updated=updated, closed=closed, total_findings=created + updated)

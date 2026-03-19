@@ -8,6 +8,7 @@ import typer
 from rich import print
 
 from openreview import __version__
+from openreview.bootstrap import build_run_composition, build_sync_composition
 from openreview.application.commands.run_review import execute_run
 from openreview.application.commands.sync_findings import execute_sync
 
@@ -33,10 +34,11 @@ def plan() -> None:
     """! Print the high-level review workflow."""
 
     print("[bold]MVP Plan[/bold]")
-    print("1) Collect Azure DevOps PR threads + latest diff")
+    print("1) Resolve provider runtime and collect changed files")
     print("2) Run AI reviewer policy on changed files")
-    print("3) Upsert comments: create/update/resolve")
-    print("4) Emit CI summary")
+    print("3) Plan provider-neutral comment lifecycle actions")
+    print("4) Apply provider-specific review updates")
+    print("5) Emit CI summary")
 
 
 @app.command()
@@ -59,9 +61,7 @@ def sync(
 ) -> None:
     """! Sync a findings JSON payload into the selected SCM provider."""
 
-    execute_sync(
-        pr_id=pr_id,
-        findings_file=findings_file,
+    composition = build_sync_composition(
         provider=provider,
         organization=organization,
         project=project,
@@ -73,8 +73,15 @@ def sync(
         gitlab_project_id=gitlab_project_id,
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
+    )
+
+    execute_sync(
+        pr_id=pr_id,
+        findings_file=findings_file,
         dry_run=dry_run,
         summary_json=summary_json,
+        provider_options=composition.provider_options,
+        sync_executor=composition.sync_executor,
     )
 
 
@@ -106,11 +113,7 @@ def run(
 ) -> None:
     """! Run the review workflow against changed files and sync the result."""
 
-    execute_run(
-        pr_id=pr_id,
-        repo_root=repo_root,
-        base_ref=base_ref,
-        config_file=config_file,
+    composition = build_run_composition(
         provider=provider,
         organization=organization,
         project=project,
@@ -124,12 +127,25 @@ def run(
         gitlab_base_url=gitlab_base_url,
         ai_provider=ai_provider,
         ai_api_key=ai_api_key,
+        openai_api_key=openai_api_key,
+    )
+
+    execute_run(
+        pr_id=pr_id,
+        repo_root=repo_root,
+        base_ref=base_ref,
+        config_file=config_file,
+        ai_provider=ai_provider,
         ai_base_url=ai_base_url,
         ai_model=ai_model,
-        openai_api_key=openai_api_key,
         max_files=max_files,
         dry_run=dry_run,
         summary_json=summary_json,
+        provider_options=composition.provider_options,
+        changed_path_collector=composition.changed_path_collector,
+        sync_executor=composition.sync_executor,
+        model_gateway=composition.model_gateway,
+        api_key=composition.api_key,
     )
 
 

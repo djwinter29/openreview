@@ -1,7 +1,16 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from openreview.domain.services.fingerprint_service import build_fingerprint as _fp
 from openreview.reviewers.agents import general_code_review as ai_reviewer
+
+
+class DummyModelGateway:
+    def __init__(self, text: str = "[]"):
+        self.text = text
+
+    def generate(self, request):
+        return SimpleNamespace(text=self.text)
 
 
 def test_fingerprint_stable() -> None:
@@ -16,7 +25,7 @@ def test_review_changed_files_parses_items(tmp_path: Path, monkeypatch) -> None:
     test_file = tmp_path / "a.c"
     test_file.write_text("int main(){return 0;}")
 
-    def fake_call(api_key: str, model: str, prompt: str):
+    def fake_call(model_gateway, api_key: str, model: str, prompt: str):
         return [
             {
                 "line": 3,
@@ -37,6 +46,7 @@ def test_review_changed_files_parses_items(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(ai_reviewer, "_call_openai_json", fake_call)
 
     findings = ai_reviewer.review_changed_files(
+        model_gateway=DummyModelGateway(),
         api_key="k",
         model="m",
         files=[ai_reviewer.ChangedFile(path="/a.c")],
@@ -55,6 +65,7 @@ def test_review_changed_files_parses_items(tmp_path: Path, monkeypatch) -> None:
 def test_review_changed_files_skips_missing_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(ai_reviewer, "_call_openai_json", lambda *args, **kwargs: [])
     findings = ai_reviewer.review_changed_files(
+        model_gateway=DummyModelGateway(),
         api_key="k",
         model="m",
         files=[ai_reviewer.ChangedFile(path="/missing.c")],

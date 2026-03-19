@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from openreview.adapters.scm.azure_devops.adapter import AzureProvider
 from openreview.adapters.scm.github.adapter import GitHubProvider
 from openreview.adapters.scm.gitlab.adapter import GitLabProvider
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, InlineCommentTarget, RefreshFindingComment
 
 
 class DummyAzureClient:
@@ -73,27 +74,21 @@ class DummyGitLabClient:
     def update_mr_note(self, pr_id, note_id, body):
         self.calls.append(("update_mr_note", pr_id, note_id, body))
 
-
-def _a(kind, payload):
-    return SimpleNamespace(kind=kind, payload=payload)
-
-
 def test_azure_provider_apply_live_updates_summary_comment():
     client = DummyAzureClient()
     provider = AzureProvider(client)
     actions = [
-        _a("create_thread", {"x": 1}),
-        _a("reopen_thread", {"threadId": 2, "status": 1}),
-        _a("add_comment", {"threadId": 2, "content": "hi"}),
-        _a("close_thread", {"threadId": 2, "status": 4}),
+        CreateFindingComment(fingerprint="f1", body="new", target=InlineCommentTarget(path="/a.py", line=3)),
+        RefreshFindingComment(fingerprint="f2", comment_id=2, body="hi", reopen=True),
+        CloseFindingComment(fingerprint="f3", comment_id=2, body="closed"),
     ]
 
     result = provider.apply(101, actions, dry_run=False)
 
-    assert result.planned == 4
-    assert result.applied == 4
+    assert result.planned == 3
+    assert result.applied == 3
     assert result.created == 1
-    assert result.updated == 2
+    assert result.updated == 1
     assert result.closed == 1
     assert any(call[0] == "create_thread" for call in client.calls)
     assert any(call[0] == "update_thread" for call in client.calls)
@@ -104,7 +99,11 @@ def test_azure_provider_apply_dry_run_skips_client_calls():
     client = DummyAzureClient()
     provider = AzureProvider(client)
 
-    result = provider.apply(101, [_a("create_thread", {})], dry_run=True)
+    result = provider.apply(
+        101,
+        [CreateFindingComment(fingerprint="f1", body="new", target=InlineCommentTarget(path="/a.py", line=3))],
+        dry_run=True,
+    )
 
     assert result.applied == 0
     assert client.calls == []
@@ -115,9 +114,9 @@ def test_github_provider_apply_fallbacks_and_summary_update():
     client.summary_comments = [{"id": 9, "body": "<!-- openreview:summary --> old"}]
     provider = GitHubProvider(client)
     actions = [
-        _a("create_review_comment", {"body": "boom", "path": "a.py", "line": 3}),
-        _a("update_review_comment", {"comment_id": 22, "body": "boom-update"}),
-        _a("close_review_comment", {"comment_id": 33, "body": "closed"}),
+        CreateFindingComment(fingerprint="f1", body="boom", target=InlineCommentTarget(path="/a.py", line=3)),
+        RefreshFindingComment(fingerprint="f2", comment_id=22, body="boom-update"),
+        CloseFindingComment(fingerprint="f3", comment_id=33, body="closed"),
     ]
 
     result = provider.apply(5, actions, dry_run=False)
@@ -136,9 +135,9 @@ def test_gitlab_provider_apply_and_create_summary_note_when_missing():
     client = DummyGitLabClient()
     provider = GitLabProvider(client)
     actions = [
-        _a("create_note", {"body": "n1"}),
-        _a("update_note", {"note_id": 7, "body": "n2"}),
-        _a("close_note", {"note_id": 8, "body": "closed"}),
+        CreateFindingComment(fingerprint="f1", body="n1"),
+        RefreshFindingComment(fingerprint="f2", comment_id=7, body="n2"),
+        CloseFindingComment(fingerprint="f3", comment_id=8, body="closed"),
     ]
 
     result = provider.apply(88, actions, dry_run=False)

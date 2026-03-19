@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from openreview.domain.entities.finding import ReviewFinding
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, InlineCommentTarget, RefreshFindingComment, SyncAction
 
 CLOSED_MARKER = "<!-- openreview:status=closed -->"
 SUMMARY_MARKER = "<!-- openreview:summary -->"
@@ -16,16 +17,6 @@ class ExistingComment:
     fingerprint: str
     body: str
     is_closed: bool = False
-
-
-@dataclass
-class PlannedCommentAction:
-    kind: str
-    fingerprint: str
-    body: str = ""
-    comment_id: Any | None = None
-    finding: ReviewFinding | None = None
-    reopen: bool = False
 
 
 def marker_for_fingerprint(fingerprint: str) -> str:
@@ -80,8 +71,8 @@ def build_summary_content(*, created: int, updated: int, closed: int, total_find
     )
 
 
-def plan_comment_sync(findings: list[ReviewFinding], existing_comments: list[ExistingComment]) -> list[PlannedCommentAction]:
-    actions: list[PlannedCommentAction] = []
+def plan_comment_sync(findings: list[ReviewFinding], existing_comments: list[ExistingComment]) -> list[SyncAction]:
+    actions: list[SyncAction] = []
     existing_by_fp: dict[str, ExistingComment] = {}
 
     for comment in existing_comments:
@@ -94,11 +85,10 @@ def plan_comment_sync(findings: list[ReviewFinding], existing_comments: list[Exi
         desired_content = comment_for_finding(finding)
         if not existing:
             actions.append(
-                PlannedCommentAction(
-                    kind="create",
+                CreateFindingComment(
                     fingerprint=fp,
                     body=desired_content,
-                    finding=finding,
+                    target=InlineCommentTarget(path=finding.path, line=finding.line),
                 )
             )
             continue
@@ -106,12 +96,10 @@ def plan_comment_sync(findings: list[ReviewFinding], existing_comments: list[Exi
         current_body = existing.body.strip()
         if existing.is_closed or current_body != desired_content.strip():
             actions.append(
-                PlannedCommentAction(
-                    kind="refresh",
+                RefreshFindingComment(
                     fingerprint=fp,
                     comment_id=existing.comment_id,
                     body=desired_content,
-                    finding=finding,
                     reopen=existing.is_closed,
                 )
             )
@@ -121,8 +109,7 @@ def plan_comment_sync(findings: list[ReviewFinding], existing_comments: list[Exi
             continue
         if not comment.is_closed:
             actions.append(
-                PlannedCommentAction(
-                    kind="close",
+                CloseFindingComment(
                     fingerprint=fp,
                     comment_id=comment.comment_id,
                     body=close_comment_body(comment.body),

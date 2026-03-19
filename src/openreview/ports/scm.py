@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from openreview.domain.entities.finding import ReviewFinding
+from openreview.domain.entities.sync_action import SyncAction
 
 
 @dataclass
@@ -63,14 +63,6 @@ class ChangedPathCollector(Protocol):
     def collect_changed_paths(self, options: ProviderOptions, pr_id: int, repo_root: Path, base_ref: str) -> list[str]: ...
 
 
-class ProviderAction(Protocol):
-    """! Minimal typed contract shared by provider-specific sync actions."""
-
-    kind: str
-    fingerprint: str
-    payload: Mapping[str, object]
-
-
 class SyncExecutor(Protocol):
     """! Interface for synchronizing findings with an SCM provider."""
 
@@ -81,7 +73,7 @@ class SyncExecutor(Protocol):
         findings: list[ReviewFinding],
         *,
         dry_run: bool = False,
-    ) -> tuple[list[ProviderAction], SyncSummary]: ...
+    ) -> tuple[list[SyncAction], SyncSummary]: ...
 
 
 class ReviewProvider(Protocol):
@@ -89,6 +81,6 @@ class ReviewProvider(Protocol):
 
     def list_existing(self, pr_id: int) -> list[ExistingReviewComment]: ...
 
-    def plan(self, findings: list[ReviewFinding], existing: list[ExistingReviewComment]) -> list[ProviderAction]: ...
+    def plan(self, findings: list[ReviewFinding], existing: list[ExistingReviewComment]) -> list[SyncAction]: ...
 
-    def apply(self, pr_id: int, actions: list[ProviderAction], *, dry_run: bool = False) -> SyncSummary: ...
+    def apply(self, pr_id: int, actions: list[SyncAction], *, dry_run: bool = False) -> SyncSummary: ...

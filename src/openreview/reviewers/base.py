@@ -8,6 +8,7 @@ from typing import Protocol
 
 from openreview.domain.entities.changed_file import ChangedFile
 from openreview.domain.entities.finding import ReviewFinding
+from openreview.ports.model import ModelPort
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class Reviewer(Protocol):
     def review_files(
         self,
         *,
+        model_gateway: ModelPort,
         api_key: str,
         model: str,
         files: list[ChangedFile],

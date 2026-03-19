@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from openreview.ports.model import ModelRequest, ModelResponse
+from openreview.ports.model import ModelPort, ModelRequest, ModelResponse
 
 
 class ModelConfigError(ValueError):
@@ -115,16 +115,21 @@ def _deepseek(req: ModelRequest) -> ModelResponse:
     return ModelResponse(text=text, usage=usage, finish_reason=finish_reason, raw=data)
 
 
+class RuntimeModelGateway(ModelPort):
+    def generate(self, request: ModelRequest) -> ModelResponse:
+        provider = request.provider.lower().strip()
+        if not request.api_key:
+            raise ModelConfigError("missing model api key")
+
+        if provider == "openai":
+            return _openai(request)
+        if provider in {"anthropic", "claude"}:
+            return _anthropic(request)
+        if provider == "deepseek":
+            return _deepseek(request)
+
+        raise ModelConfigError("model provider must be one of: openai|claude|deepseek")
+
+
 def generate_text(request: ModelRequest) -> ModelResponse:
-    provider = request.provider.lower().strip()
-    if not request.api_key:
-        raise ModelConfigError("missing model api key")
-
-    if provider == "openai":
-        return _openai(request)
-    if provider in {"anthropic", "claude"}:
-        return _anthropic(request)
-    if provider == "deepseek":
-        return _deepseek(request)
-
-    raise ModelConfigError("model provider must be one of: openai|claude|deepseek")
+    return RuntimeModelGateway().generate(request)

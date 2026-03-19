@@ -5,6 +5,7 @@ from openreview.adapters.model.runtime import (
     ModelCallError,
     ModelConfigError,
     ModelRateLimitError,
+    RuntimeModelGateway,
     generate_text,
 )
 
@@ -14,5 +15,6 @@ __all__ = [
     "ModelConfigError",
     "ModelCallError",
     "ModelRateLimitError",
+    "RuntimeModelGateway",
     "generate_text",
 ]
