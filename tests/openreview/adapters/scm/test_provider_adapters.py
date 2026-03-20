@@ -1,9 +1,7 @@
-from types import SimpleNamespace
-
 from openreview.adapters.scm.azure_devops.adapter import AzureProvider
 from openreview.adapters.scm.github.adapter import GitHubProvider
 from openreview.adapters.scm.gitlab.adapter import GitLabProvider
-from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, InlineCommentTarget, RefreshFindingComment
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateGeneralFindingComment, CreateInlineFindingComment, InlineCommentTarget, RefreshFindingComment
 
 
 class DummyAzureClient:
@@ -78,7 +76,7 @@ def test_azure_provider_apply_live_updates_summary_comment():
     client = DummyAzureClient()
     provider = AzureProvider(client)
     actions = [
-        CreateFindingComment(fingerprint="f1", body="new", target=InlineCommentTarget(path="/a.py", line=3)),
+        CreateInlineFindingComment(fingerprint="f1", body="new", target=InlineCommentTarget(path="/a.py", line=3)),
         RefreshFindingComment(fingerprint="f2", comment_id=2, body="hi", reopen=True),
         CloseFindingComment(fingerprint="f3", comment_id=2, body="closed"),
     ]
@@ -101,7 +99,7 @@ def test_azure_provider_apply_dry_run_skips_client_calls():
 
     result = provider.apply(
         101,
-        [CreateFindingComment(fingerprint="f1", body="new", target=InlineCommentTarget(path="/a.py", line=3))],
+        [CreateInlineFindingComment(fingerprint="f1", body="new", target=InlineCommentTarget(path="/a.py", line=3))],
         dry_run=True,
     )
 
@@ -114,7 +112,7 @@ def test_github_provider_apply_fallbacks_and_summary_update():
     client.summary_comments = [{"id": 9, "body": "<!-- openreview:summary --> old"}]
     provider = GitHubProvider(client)
     actions = [
-        CreateFindingComment(fingerprint="f1", body="boom", target=InlineCommentTarget(path="/a.py", line=3)),
+        CreateInlineFindingComment(fingerprint="f1", body="boom", target=InlineCommentTarget(path="/a.py", line=3)),
         RefreshFindingComment(fingerprint="f2", comment_id=22, body="boom-update"),
         CloseFindingComment(fingerprint="f3", comment_id=33, body="closed"),
     ]
@@ -135,7 +133,7 @@ def test_gitlab_provider_apply_and_create_summary_note_when_missing():
     client = DummyGitLabClient()
     provider = GitLabProvider(client)
     actions = [
-        CreateFindingComment(fingerprint="f1", body="n1"),
+        CreateGeneralFindingComment(fingerprint="f1", body="n1"),
         RefreshFindingComment(fingerprint="f2", comment_id=7, body="n2"),
         CloseFindingComment(fingerprint="f3", comment_id=8, body="closed"),
     ]

@@ -1,5 +1,5 @@
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateInlineFindingComment, RefreshFindingComment
 from openreview.domain.services.comment_sync_planner import ExistingComment, plan_comment_sync
 
 
@@ -10,7 +10,7 @@ def _finding(fp: str, message: str = "issue") -> ReviewFinding:
 def test_plan_comment_sync_create_refresh_and_close() -> None:
     actions = plan_comment_sync([_finding("f1")], [])
     assert len(actions) == 1
-    assert isinstance(actions[0], CreateFindingComment)
+    assert isinstance(actions[0], CreateInlineFindingComment)
 
     existing = [ExistingComment(comment_id=7, fingerprint="f1", body="<!-- openreview:fingerprint=f1 -->\nold", is_closed=True)]
     actions = plan_comment_sync([_finding("f1", "new message")], existing)

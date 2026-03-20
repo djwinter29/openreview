@@ -10,10 +10,16 @@ class InlineCommentTarget:
 
 
 @dataclass(frozen=True)
-class CreateFindingComment:
+class CreateInlineFindingComment:
     fingerprint: str
     body: str
-    target: InlineCommentTarget | None = None
+    target: InlineCommentTarget
+
+
+@dataclass(frozen=True)
+class CreateGeneralFindingComment:
+    fingerprint: str
+    body: str
 
 
 @dataclass(frozen=True)
@@ -31,11 +37,11 @@ class CloseFindingComment:
     body: str
 
 
-SyncAction = CreateFindingComment | RefreshFindingComment | CloseFindingComment
+SyncAction = CreateInlineFindingComment | CreateGeneralFindingComment | RefreshFindingComment | CloseFindingComment
 
 
 def sync_action_kind(action: SyncAction) -> str:
-    if isinstance(action, CreateFindingComment):
+    if isinstance(action, (CreateInlineFindingComment, CreateGeneralFindingComment)):
         return "create"
     if isinstance(action, RefreshFindingComment):
         return "refresh"

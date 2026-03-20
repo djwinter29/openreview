@@ -1,20 +1,104 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 
-from openreview.ports.model import ModelPort, ModelRequest, ModelResponse
+from openreview.ports.model import (
+    ModelCallError,
+    ModelConfigError,
+    ModelPort,
+    ModelRequest,
+    ModelResponse,
+    ModelRateLimitError,
+    ReviewModelContractError,
+    ReviewModelGateway,
+    ReviewRequest,
+    StructuredReviewFinding,
+)
 
 
-class ModelConfigError(ValueError):
-    pass
+def _build_review_prompt(request: ReviewRequest) -> str:
+    return (
+        "You are a strict senior code reviewer. "
+        "Return ONLY valid JSON array. "
+        f"{request.instructions} "
+        "Schema version: "
+        f"{request.response_schema}. "
+        "Schema per item: {line:int,severity:string,confidence:number,message:string,suggestion:string}. "
+        "Severity must be one of: info, warning, error. confidence in [0,1].\n\n"
+        f"File: {request.path}\n"
+        "Code:\n"
+        f"```\n{request.content}\n```\n"
+    )
 
 
-class ModelCallError(RuntimeError):
-    pass
+def _unwrap_json_text(text: str) -> str:
+    if not text:
+        return ""
+    body = text.strip()
+    if body.startswith("```"):
+        body = body.strip("`")
+        if body.lower().startswith("json"):
+            body = body[4:].strip()
+    return body
 
 
-class ModelRateLimitError(ModelCallError):
-    pass
+def _contract_error(message: str, text: str) -> ReviewModelContractError:
+    snippet = _unwrap_json_text(text)
+    snippet = snippet[:200] + ("..." if len(snippet) > 200 else "")
+    suffix = f" Response snippet: {snippet}" if snippet else " Response was empty."
+    return ReviewModelContractError(f"invalid review model response: {message}.{suffix}")
+
+
+def _parse_structured_review_findings(text: str) -> list[StructuredReviewFinding]:
+    body = _unwrap_json_text(text)
+    if not body:
+        raise _contract_error("empty body", text)
+
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError as err:
+        raise _contract_error(f"malformed JSON ({err.msg})", body) from err
+    if not isinstance(parsed, list):
+        raise _contract_error(f"expected top-level list but got {type(parsed).__name__}", body)
+
+    findings: list[StructuredReviewFinding] = []
+    invalid_items = 0
+    for item in parsed:
+        if not isinstance(item, dict):
+            invalid_items += 1
+            continue
+
+        try:
+            line = int(item.get("line", 1))
+        except (TypeError, ValueError):
+            line = 1
+
+        severity = str(item.get("severity", "warning")).lower()
+        if severity not in {"info", "warning", "error"}:
+            severity = "warning"
+
+        try:
+            confidence = float(item.get("confidence", 0.7))
+        except (TypeError, ValueError):
+            confidence = 0.7
+        confidence = max(0.0, min(1.0, confidence))
+
+        findings.append(
+            StructuredReviewFinding(
+                line=max(1, line),
+                severity=severity,
+                confidence=confidence,
+                message=str(item.get("message", "Potential issue")),
+                suggestion=str(item.get("suggestion", "")).strip(),
+            )
+        )
+
+    if invalid_items:
+        raise _contract_error(f"expected all list items to be objects, found {invalid_items} invalid item(s)", body)
+
+    return findings
 
 
 def _raise_for_status(response: httpx.Response, provider: str) -> None:
@@ -129,6 +213,36 @@ class RuntimeModelGateway(ModelPort):
             return _deepseek(request)
 
         raise ModelConfigError("model provider must be one of: openai|claude|deepseek")
+
+
+class ConfiguredReviewModelGateway(ReviewModelGateway):
+    def __init__(
+        self,
+        *,
+        transport: ModelPort,
+        provider: str,
+        model: str,
+        api_key: str,
+        base_url: str | None = None,
+    ):
+        self._transport = transport
+        self._provider = provider
+        self._model = model
+        self._api_key = api_key
+        self._base_url = base_url
+
+    def review(self, request: ReviewRequest) -> list[StructuredReviewFinding]:
+        response = self._transport.generate(
+            ModelRequest(
+                provider=self._provider,
+                model=self._model,
+                api_key=self._api_key,
+                prompt=_build_review_prompt(request),
+                temperature=0.1,
+                base_url=self._base_url,
+            )
+        )
+        return _parse_structured_review_findings(response.text)
 
 
 def generate_text(request: ModelRequest) -> ModelResponse:

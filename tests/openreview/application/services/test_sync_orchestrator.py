@@ -4,8 +4,8 @@ import pytest
 
 from openreview.application.services.sync_orchestrator import print_summary, sync_with_provider
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.entities.sync_action import CreateFindingComment
-from openreview.ports.scm import ProviderOptions, SyncExecutionError, SyncSummary
+from openreview.domain.entities.sync_action import CreateGeneralFindingComment
+from openreview.ports.scm import SyncExecutionError, SyncSummary
 
 
 def test_print_summary_output(capsys) -> None:
@@ -45,11 +45,11 @@ class DummySyncExecutor:
         self.error = error
         self.calls = []
 
-    def sync(self, options, pr_id, findings, *, dry_run=False):
-        self.calls.append((options, pr_id, findings, dry_run))
+    def sync(self, pr_id, findings, *, dry_run=False):
+        self.calls.append((pr_id, findings, dry_run))
         if self.error is not None:
             raise self.error
-        return ([CreateFindingComment(fingerprint="fp-1", body="body")], SyncSummary(planned=1, applied=1, created=1, updated=0, closed=0))
+        return ([CreateGeneralFindingComment(fingerprint="fp-1", body="body")], SyncSummary(planned=1, applied=1, created=1, updated=0, closed=0))
 
 
 def test_sync_with_provider_uses_injected_executor() -> None:
@@ -57,7 +57,6 @@ def test_sync_with_provider_uses_injected_executor() -> None:
     findings = [ReviewFinding(path="/a.py", line=1, severity="warning", message="m", fingerprint="fp-1")]
 
     planned, summary = sync_with_provider(
-        ProviderOptions(provider="github"),
         123,
         findings,
         dry_run=True,
@@ -66,7 +65,7 @@ def test_sync_with_provider_uses_injected_executor() -> None:
 
     assert planned == 1
     assert summary.applied == 1
-    assert executor.calls[0][1] == 123
+    assert executor.calls[0][0] == 123
 
 
 def test_sync_with_provider_wraps_sync_errors() -> None:
@@ -74,7 +73,6 @@ def test_sync_with_provider_wraps_sync_errors() -> None:
 
     with pytest.raises(Exception):
         sync_with_provider(
-            ProviderOptions(provider="github"),
             123,
             [],
             dry_run=True,

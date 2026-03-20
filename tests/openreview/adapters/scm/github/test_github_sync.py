@@ -1,20 +1,18 @@
-from openreview.adapters.scm.github.sync import normalize_github_comments, plan_github_sync
-from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment
+from openreview.adapters.scm.github.sync import normalize_github_comments
 
 
-def rf(fp: str, msg: str = "m") -> ReviewFinding:
-    return ReviewFinding(path="/a.c", line=1, severity="warning", message=msg, fingerprint=fp)
-
-
-def test_create_update_close_flow() -> None:
-    actions = plan_github_sync([rf("f1")], [])
-    assert len(actions) == 1 and isinstance(actions[0], CreateFindingComment)
-    assert actions[0].target is not None and actions[0].target.path == "/a.c"
-
+def test_normalize_github_comments_extracts_existing_comment_state() -> None:
     existing = normalize_github_comments([{"id": 10, "body": "<!-- openreview:fingerprint=f1 -->\nold"}])
-    actions = plan_github_sync([rf("f1", "new message")], existing)
-    assert any(isinstance(action, RefreshFindingComment) for action in actions)
 
-    actions = plan_github_sync([], existing)
-    assert len(actions) == 1 and isinstance(actions[0], CloseFindingComment)
+    assert len(existing) == 1
+    assert existing[0].comment_id == 10
+    assert existing[0].fingerprint == "f1"
+    assert existing[0].is_closed is False
+
+
+def test_normalize_github_comments_marks_closed_comments() -> None:
+    existing = normalize_github_comments(
+        [{"id": 10, "body": "<!-- openreview:fingerprint=f1 -->\nold\n<!-- openreview:status=closed -->"}]
+    )
+
+    assert existing[0].is_closed is True

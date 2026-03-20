@@ -10,7 +10,7 @@ import typer
 
 from openreview.application.services.finding_pipeline import parse_findings_payload
 from openreview.application.services.sync_orchestrator import print_summary, sync_with_provider
-from openreview.ports.scm import ProviderOptions, SyncExecutor
+from openreview.ports.scm import SyncExecutor
 
 
 def execute_sync(
@@ -19,7 +19,6 @@ def execute_sync(
     findings_file: Path,
     dry_run: bool,
     summary_json: bool,
-    provider_options: ProviderOptions,
     sync_executor: SyncExecutor,
 ) -> None:
     """! Load findings from disk, validate them, and sync them to a provider.
@@ -38,7 +37,6 @@ def execute_sync(
 
     findings = parse_findings_payload(findings_raw)
     planned, summary = sync_with_provider(
-        provider_options,
         pr_id,
         findings,
         dry_run=dry_run,

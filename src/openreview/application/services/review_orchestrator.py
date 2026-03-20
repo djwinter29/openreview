@@ -19,9 +19,8 @@ from openreview.domain.services.finding_filter_service import (
 	path_allowed,
 )
 from openreview.domain.services.line_mapping_service import changed_hunks
-from openreview.ports.model import ModelPort
-from openreview.ports.scm import ChangedPathCollector, ProviderOptions
-from openreview.reviewers.registry import get_reviewer
+from openreview.ports.model import ReviewModelGateway
+from openreview.ports.scm import ChangedPathCollector
 from openreview.reviewers.router import choose_reviewers
 
 
@@ -39,20 +38,15 @@ def execute_review(
 	repo_root: Path,
 	base_ref: str,
 	config: OpenReviewConfig,
-	provider_options: ProviderOptions,
 	changed_path_collector: ChangedPathCollector,
-	model_gateway: ModelPort,
-	api_key: str,
-	ai_provider: str,
-	ai_model: str,
-	ai_base_url: str | None,
+	review_model: ReviewModelGateway,
 	max_files: int,
 	reviewer_strategy: str = "fixed",
 ) -> ReviewExecutionResult:
 	"""! Execute changed-file discovery, reviewer invocation, and finding filtering."""
 
 	try:
-		changed_paths = changed_path_collector.collect_changed_paths(provider_options, pr_id, repo_root, base_ref)
+		changed_paths = changed_path_collector.collect_changed_paths(pr_id, repo_root, base_ref)
 	except subprocess.CalledProcessError as err:
 		output = (err.output or "").strip()
 		msg = f"Unable to diff against base ref '{base_ref}'."
@@ -67,17 +61,12 @@ def execute_review(
 	print(f"Changed files considered: {len(files)}")
 
 	findings: list[ReviewFinding] = []
-	for reviewer_name in choose_reviewers(reviewer_strategy):
-		reviewer = get_reviewer(reviewer_name)
+	for reviewer in choose_reviewers(reviewer_strategy):
 		findings.extend(
 			reviewer.review_files(
-				model_gateway=model_gateway,
-				api_key=api_key,
-				model=ai_model,
+				review_model=review_model,
 				files=files,
 				repo_root=repo_root,
-				api_provider=ai_provider,
-				api_base_url=ai_base_url,
 			)
 		)
 

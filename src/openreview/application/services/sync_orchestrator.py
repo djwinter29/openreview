@@ -9,7 +9,7 @@ from rich import print
 
 from openreview.domain.entities.finding import ReviewFinding
 from openreview.domain.entities.sync_action import sync_action_kind
-from openreview.ports.scm import ProviderOptions, SyncExecutionError, SyncExecutor, SyncSummary
+from openreview.ports.scm import SyncExecutionError, SyncExecutor, SyncSummary
 
 
 def summary_payload(*, raw_findings: int | None, filtered_findings: int | None, planned_actions: int, summary: SyncSummary) -> dict[str, int]:
@@ -64,7 +64,6 @@ def print_summary(
 
 
 def sync_with_provider(
-    options: ProviderOptions,
     pr_id: int,
     findings: list[ReviewFinding],
     *,
@@ -77,7 +76,7 @@ def sync_with_provider(
     """
 
     try:
-        actions, summary = sync_executor.sync(options, pr_id, findings, dry_run=dry_run)
+        actions, summary = sync_executor.sync(pr_id, findings, dry_run=dry_run)
     except SyncExecutionError as err:
         raise typer.BadParameter(str(err)) from err
 

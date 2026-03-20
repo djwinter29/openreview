@@ -1,22 +1,21 @@
-from openreview.adapters.scm.gitlab.sync import build_summary_note, find_existing_summary_note, normalize_gitlab_notes, plan_gitlab_sync
-from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment
+from openreview.adapters.scm.gitlab.sync import build_summary_note, find_existing_summary_note, normalize_gitlab_notes
 
 
-def rf(fp: str, msg: str = "m") -> ReviewFinding:
-    return ReviewFinding(path="/a.c", line=1, severity="warning", message=msg, fingerprint=fp)
-
-
-def test_gitlab_plan_create_update_close():
-    actions = plan_gitlab_sync([rf("f1")], [])
-    assert len(actions) == 1 and isinstance(actions[0], CreateFindingComment)
-
+def test_normalize_gitlab_notes_extracts_existing_comment_state() -> None:
     existing = normalize_gitlab_notes([{"id": 10, "body": "<!-- openreview:fingerprint=f1 -->\nold"}])
-    actions = plan_gitlab_sync([rf("f1", "new")], existing)
-    assert any(isinstance(action, RefreshFindingComment) for action in actions)
 
-    actions = plan_gitlab_sync([], existing)
-    assert len(actions) == 1 and isinstance(actions[0], CloseFindingComment)
+    assert len(existing) == 1
+    assert existing[0].comment_id == 10
+    assert existing[0].fingerprint == "f1"
+    assert existing[0].is_closed is False
+
+
+def test_normalize_gitlab_notes_marks_closed_comments() -> None:
+    existing = normalize_gitlab_notes(
+        [{"id": 10, "body": "<!-- openreview:fingerprint=f1 -->\nold\n<!-- openreview:status=closed -->"}]
+    )
+
+    assert existing[0].is_closed is True
 
 
 def test_gitlab_summary_helpers():

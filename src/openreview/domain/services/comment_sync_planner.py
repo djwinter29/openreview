@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, InlineCommentTarget, RefreshFindingComment, SyncAction
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateInlineFindingComment, InlineCommentTarget, RefreshFindingComment, SyncAction
 
 CLOSED_MARKER = "<!-- openreview:status=closed -->"
 SUMMARY_MARKER = "<!-- openreview:summary -->"
@@ -17,6 +17,13 @@ class ExistingComment:
     fingerprint: str
     body: str
     is_closed: bool = False
+
+
+class ExistingCommentSnapshot(Protocol):
+    comment_id: Any
+    fingerprint: str
+    body: str
+    is_closed: bool
 
 
 def marker_for_fingerprint(fingerprint: str) -> str:
@@ -71,6 +78,22 @@ def build_summary_content(*, created: int, updated: int, closed: int, total_find
     )
 
 
+def plan_review_comment_actions(
+    findings: list[ReviewFinding],
+    existing_comments: Iterable[ExistingCommentSnapshot],
+) -> list[SyncAction]:
+    neutral_existing = [
+        ExistingComment(
+            comment_id=comment.comment_id,
+            fingerprint=comment.fingerprint,
+            body=comment.body,
+            is_closed=comment.is_closed,
+        )
+        for comment in existing_comments
+    ]
+    return plan_comment_sync(findings, neutral_existing)
+
+
 def plan_comment_sync(findings: list[ReviewFinding], existing_comments: list[ExistingComment]) -> list[SyncAction]:
     actions: list[SyncAction] = []
     existing_by_fp: dict[str, ExistingComment] = {}
@@ -85,7 +108,7 @@ def plan_comment_sync(findings: list[ReviewFinding], existing_comments: list[Exi
         desired_content = comment_for_finding(finding)
         if not existing:
             actions.append(
-                CreateFindingComment(
+                CreateInlineFindingComment(
                     fingerprint=fp,
                     body=desired_content,
                     target=InlineCommentTarget(path=finding.path, line=finding.line),

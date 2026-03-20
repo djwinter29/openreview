@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.entities.sync_action import SyncAction
-from openreview.domain.services.comment_sync_planner import ExistingComment, build_summary_content, extract_fingerprint, find_summary_item, plan_comment_sync
+from openreview.domain.services.comment_sync_planner import build_summary_content, extract_fingerprint, find_summary_item
 from openreview.ports.scm import ExistingReviewComment
 
 
@@ -29,16 +27,3 @@ def normalize_gitlab_notes(existing_notes: list[dict]) -> list[ExistingReviewCom
                 )
             )
     return notes
-
-
-def plan_gitlab_sync(findings: list[ReviewFinding], existing_notes: list[ExistingReviewComment]) -> list[SyncAction]:
-    neutral_existing: list[ExistingComment] = [
-        ExistingComment(
-            comment_id=note.comment_id,
-            fingerprint=note.fingerprint,
-            body=note.body,
-            is_closed=note.is_closed,
-        )
-        for note in existing_notes
-    ]
-    return plan_comment_sync(findings, neutral_existing)

@@ -7,9 +7,8 @@ from openreview.adapters.scm.gitlab.sync import (
     build_summary_note,
     find_existing_summary_note,
     normalize_gitlab_notes,
-    plan_gitlab_sync,
 )
-from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment, SyncAction
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateGeneralFindingComment, CreateInlineFindingComment, RefreshFindingComment, SyncAction
 from openreview.ports.scm import ExistingReviewComment, SyncSummary
 
 
@@ -20,11 +19,8 @@ class GitLabProvider:
     def list_existing(self, pr_id: int) -> list[ExistingReviewComment]:
         return normalize_gitlab_notes(self.client.get_mr_notes(pr_id))
 
-    def plan(self, findings, existing: list[ExistingReviewComment]):
-        return plan_gitlab_sync(findings, existing)
-
     def apply(self, pr_id: int, actions: list[SyncAction], *, dry_run: bool = False) -> SyncSummary:
-        created = sum(1 for action in actions if isinstance(action, CreateFindingComment))
+        created = sum(1 for action in actions if isinstance(action, (CreateInlineFindingComment, CreateGeneralFindingComment)))
         updated = sum(1 for action in actions if isinstance(action, RefreshFindingComment))
         closed = sum(1 for action in actions if isinstance(action, CloseFindingComment))
         if dry_run:
@@ -32,7 +28,7 @@ class GitLabProvider:
 
         applied = 0
         for action in actions:
-            if isinstance(action, CreateFindingComment):
+            if isinstance(action, (CreateInlineFindingComment, CreateGeneralFindingComment)):
                 self.client.create_mr_note(pr_id, action.body)
             else:
                 self.client.update_mr_note(pr_id, action.comment_id, action.body)

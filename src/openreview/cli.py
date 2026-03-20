@@ -80,7 +80,6 @@ def sync(
         findings_file=findings_file,
         dry_run=dry_run,
         summary_json=summary_json,
-        provider_options=composition.provider_options,
         sync_executor=composition.sync_executor,
     )
 
@@ -126,8 +125,10 @@ def run(
         gitlab_token=gitlab_token,
         gitlab_base_url=gitlab_base_url,
         ai_provider=ai_provider,
+        ai_model=ai_model,
         ai_api_key=ai_api_key,
         openai_api_key=openai_api_key,
+        ai_base_url=ai_base_url,
     )
 
     execute_run(
@@ -135,17 +136,12 @@ def run(
         repo_root=repo_root,
         base_ref=base_ref,
         config_file=config_file,
-        ai_provider=ai_provider,
-        ai_base_url=ai_base_url,
-        ai_model=ai_model,
         max_files=max_files,
         dry_run=dry_run,
         summary_json=summary_json,
-        provider_options=composition.provider_options,
         changed_path_collector=composition.changed_path_collector,
         sync_executor=composition.sync_executor,
-        model_gateway=composition.model_gateway,
-        api_key=composition.api_key,
+        review_model=composition.review_model,
     )
 
 

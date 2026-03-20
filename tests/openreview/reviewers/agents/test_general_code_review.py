@@ -1,16 +1,19 @@
 from pathlib import Path
-from types import SimpleNamespace
 
+from openreview.domain.entities.finding import ReviewFinding
+from openreview.ports.model import ReviewRequest, StructuredReviewFinding
 from openreview.domain.services.fingerprint_service import build_fingerprint as _fp
 from openreview.reviewers.agents import general_code_review as ai_reviewer
 
 
-class DummyModelGateway:
-    def __init__(self, text: str = "[]"):
-        self.text = text
+class DummyReviewModel:
+    def __init__(self, findings: list[StructuredReviewFinding] | None = None):
+        self.findings = findings or []
+        self.requests: list[ReviewRequest] = []
 
-    def generate(self, request):
-        return SimpleNamespace(text=self.text)
+    def review(self, request: ReviewRequest) -> list[StructuredReviewFinding]:
+        self.requests.append(request)
+        return list(self.findings)
 
 
 def test_fingerprint_stable() -> None:
@@ -24,31 +27,27 @@ def test_normalize_message_and_fp_stability() -> None:
 def test_review_changed_files_parses_items(tmp_path: Path, monkeypatch) -> None:
     test_file = tmp_path / "a.c"
     test_file.write_text("int main(){return 0;}")
-
-    def fake_call(model_gateway, api_key: str, model: str, prompt: str):
-        return [
-            {
-                "line": 3,
-                "severity": "ERROR",
-                "confidence": 0.91,
-                "message": "Potential null dereference",
-                "suggestion": "Add a null check.",
-            },
-            {
-                "line": "x",
-                "severity": "weird",
-                "confidence": "bad",
-                "message": " style issue ",
-                "suggestion": "",
-            },
+    review_model = DummyReviewModel(
+        [
+            StructuredReviewFinding(
+                line=3,
+                severity="error",
+                confidence=0.91,
+                message="Potential null dereference",
+                suggestion="Add a null check.",
+            ),
+            StructuredReviewFinding(
+                line=1,
+                severity="warning",
+                confidence=0.7,
+                message=" style issue ",
+                suggestion="",
+            ),
         ]
-
-    monkeypatch.setattr(ai_reviewer, "_call_openai_json", fake_call)
+    )
 
     findings = ai_reviewer.review_changed_files(
-        model_gateway=DummyModelGateway(),
-        api_key="k",
-        model="m",
+        review_model=review_model,
         files=[ai_reviewer.ChangedFile(path="/a.c")],
         repo_root=tmp_path,
     )
@@ -60,14 +59,15 @@ def test_review_changed_files_parses_items(tmp_path: Path, monkeypatch) -> None:
     assert findings[1].severity == "warning"
     assert findings[1].confidence == 0.7
     assert findings[1].line == 1
+    assert len(review_model.requests) == 1
+    assert review_model.requests[0].path == "/a.c"
+    assert review_model.requests[0].content == "int main(){return 0;}"
 
 
 def test_review_changed_files_skips_missing_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(ai_reviewer, "_call_openai_json", lambda *args, **kwargs: [])
+    del monkeypatch
     findings = ai_reviewer.review_changed_files(
-        model_gateway=DummyModelGateway(),
-        api_key="k",
-        model="m",
+        review_model=DummyReviewModel(),
         files=[ai_reviewer.ChangedFile(path="/missing.c")],
         repo_root=tmp_path,
     )

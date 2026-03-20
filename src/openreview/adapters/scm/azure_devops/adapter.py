@@ -7,9 +7,8 @@ from openreview.adapters.scm.azure_devops.sync import (
     build_azure_summary,
     find_azure_summary_thread,
     normalize_azure_threads,
-    plan_azure_sync,
 )
-from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment, SyncAction
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateInlineFindingComment, RefreshFindingComment, SyncAction
 from openreview.ports.scm import ExistingReviewComment, SyncSummary
 
 
@@ -20,11 +19,8 @@ class AzureProvider:
     def list_existing(self, pr_id: int) -> list[ExistingReviewComment]:
         return normalize_azure_threads(self.client.get_pull_request_threads(pr_id))
 
-    def plan(self, findings, existing: list[ExistingReviewComment]):
-        return plan_azure_sync(findings, existing)
-
     def apply(self, pr_id: int, actions: list[SyncAction], *, dry_run: bool = False) -> SyncSummary:
-        created = sum(1 for action in actions if isinstance(action, CreateFindingComment))
+        created = sum(1 for action in actions if isinstance(action, CreateInlineFindingComment))
         updated = sum(1 for action in actions if isinstance(action, RefreshFindingComment))
         closed = sum(1 for action in actions if isinstance(action, CloseFindingComment))
         if dry_run:
@@ -32,18 +28,16 @@ class AzureProvider:
 
         applied = 0
         for action in actions:
-            if isinstance(action, CreateFindingComment):
-                target = action.target
-                assert target is not None
+            if isinstance(action, CreateInlineFindingComment):
                 self.client.create_thread(
                     pr_id,
                     {
                         "comments": [{"parentCommentId": 0, "content": action.body, "commentType": 1}],
                         "status": 1,
                         "threadContext": {
-                            "filePath": target.path,
-                            "rightFileStart": {"line": target.line, "offset": 1},
-                            "rightFileEnd": {"line": target.line, "offset": 1},
+                            "filePath": action.target.path,
+                            "rightFileStart": {"line": action.target.line, "offset": 1},
+                            "rightFileEnd": {"line": action.target.line, "offset": 1},
                         },
                     },
                 )

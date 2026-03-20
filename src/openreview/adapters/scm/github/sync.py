@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from openreview.domain.entities.finding import ReviewFinding
-from openreview.domain.entities.sync_action import SyncAction
-from openreview.domain.services.comment_sync_planner import ExistingComment, build_summary_content, extract_fingerprint, find_summary_item, plan_comment_sync
+from openreview.domain.services.comment_sync_planner import build_summary_content, extract_fingerprint, find_summary_item
 from openreview.ports.scm import ExistingReviewComment
 
 
@@ -21,19 +19,6 @@ def normalize_github_comments(existing_comments: list[dict]) -> list[ExistingRev
                 )
             )
     return comments
-
-
-def plan_github_sync(findings: list[ReviewFinding], existing_comments: list[ExistingReviewComment]) -> list[SyncAction]:
-    neutral_existing: list[ExistingComment] = [
-        ExistingComment(
-            comment_id=comment.comment_id,
-            fingerprint=comment.fingerprint,
-            body=comment.body,
-            is_closed=comment.is_closed,
-        )
-        for comment in existing_comments
-    ]
-    return plan_comment_sync(findings, neutral_existing)
 
 
 def build_summary_comment(*, created: int, updated: int, closed: int, total_findings: int) -> str:

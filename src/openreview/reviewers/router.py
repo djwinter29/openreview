@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from openreview.reviewers.registry import DEFAULT_REVIEWERS
+from openreview.reviewers.base import Reviewer
+from openreview.reviewers.registry import list_reviewer_registrations
 
 
-def choose_reviewers(strategy: str = "fixed") -> list[str]:
-    """! Return the ordered reviewer names for the active routing strategy."""
+def choose_reviewers(strategy: str = "fixed") -> list[Reviewer]:
+    """! Return reviewer instances for the active routing strategy."""
 
-    del strategy
-    return list(DEFAULT_REVIEWERS)
+    if strategy == "fixed":
+        return [registration.build_reviewer() for registration in list_reviewer_registrations()]
+    raise ValueError(f"unknown reviewer strategy: {strategy}")

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from openreview.adapters.scm.azure_devops import AzureDevOpsClient
 from openreview.domain.entities.finding import ReviewFinding
 from openreview.domain.entities.sync_action import SyncAction
-from openreview.ports.scm import ChangedPathCollector, ProviderOptions, ReviewProvider, SyncExecutionError, SyncExecutor, SyncSummary
+from openreview.domain.services.comment_sync_planner import plan_review_comment_actions
+from openreview.ports.scm import ChangedPathCollector, ExistingReviewComment, ReviewProvider, SyncExecutionError, SyncExecutor, SyncSummary
+
+SyncPlanner = Callable[[list[ReviewFinding], list[ExistingReviewComment]], list[SyncAction]]
 
 
 def _git_changed_paths(repo_root: Path, base_ref: str) -> list[str]:
@@ -21,8 +25,7 @@ def _git_changed_paths(repo_root: Path, base_ref: str) -> list[str]:
 class GitDiffChangedPathCollector(ChangedPathCollector):
     """! Changed-file collector backed by local git diff output."""
 
-    def collect_changed_paths(self, options: ProviderOptions, pr_id: int, repo_root: Path, base_ref: str) -> list[str]:
-        del options
+    def collect_changed_paths(self, pr_id: int, repo_root: Path, base_ref: str) -> list[str]:
         del pr_id
         return _git_changed_paths(repo_root, base_ref)
 
@@ -33,8 +36,7 @@ class AzureChangedPathCollector(ChangedPathCollector):
     def __init__(self, client: AzureDevOpsClient):
         self._client = client
 
-    def collect_changed_paths(self, options: ProviderOptions, pr_id: int, repo_root: Path, base_ref: str) -> list[str]:
-        del options
+    def collect_changed_paths(self, pr_id: int, repo_root: Path, base_ref: str) -> list[str]:
         del repo_root
         del base_ref
         return self._client.get_changed_files_latest_iteration(pr_id)
@@ -43,19 +45,18 @@ class AzureChangedPathCollector(ChangedPathCollector):
 class ProviderSyncExecutor(SyncExecutor):
     """! Sync executor that applies a pre-built provider implementation."""
 
-    def __init__(self, provider: ReviewProvider):
+    def __init__(self, provider: ReviewProvider, planner: SyncPlanner = plan_review_comment_actions):
         self._provider = provider
+        self._planner = planner
 
     def sync(
         self,
-        options: ProviderOptions,
         pr_id: int,
         findings: list[ReviewFinding],
         *,
         dry_run: bool = False,
     ) -> tuple[list[SyncAction], SyncSummary]:
-        del options
-        return run_sync_pipeline(self._provider, pr_id, findings, dry_run=dry_run)
+        return run_sync_pipeline(self._provider, pr_id, findings, planner=self._planner, dry_run=dry_run)
 
 
 def run_sync_pipeline(
@@ -63,6 +64,7 @@ def run_sync_pipeline(
     pr_id: int,
     findings: list[ReviewFinding],
     *,
+    planner: SyncPlanner = plan_review_comment_actions,
     dry_run: bool = False,
 ) -> tuple[list[SyncAction], SyncSummary]:
     try:
@@ -71,7 +73,7 @@ def run_sync_pipeline(
         raise SyncExecutionError("list_existing", exc) from exc
 
     try:
-        actions = provider.plan(findings, existing)
+        actions = planner(findings, existing)
     except Exception as exc:  # pragma: no cover
         raise SyncExecutionError("plan", exc) from exc
 

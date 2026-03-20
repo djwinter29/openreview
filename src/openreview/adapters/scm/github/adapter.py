@@ -7,9 +7,8 @@ from openreview.adapters.scm.github.sync import (
     build_summary_comment,
     find_existing_summary_comment,
     normalize_github_comments,
-    plan_github_sync,
 )
-from openreview.domain.entities.sync_action import CloseFindingComment, CreateFindingComment, RefreshFindingComment, SyncAction
+from openreview.domain.entities.sync_action import CloseFindingComment, CreateInlineFindingComment, RefreshFindingComment, SyncAction
 from openreview.ports.scm import ExistingReviewComment, SyncSummary
 
 
@@ -20,11 +19,8 @@ class GitHubProvider:
     def list_existing(self, pr_id: int) -> list[ExistingReviewComment]:
         return normalize_github_comments(self.client.get_review_comments(pr_id) + self.client.get_issue_comments(pr_id))
 
-    def plan(self, findings, existing: list[ExistingReviewComment]):
-        return plan_github_sync(findings, existing)
-
     def apply(self, pr_id: int, actions: list[SyncAction], *, dry_run: bool = False) -> SyncSummary:
-        created = sum(1 for action in actions if isinstance(action, CreateFindingComment))
+        created = sum(1 for action in actions if isinstance(action, CreateInlineFindingComment))
         updated = sum(1 for action in actions if isinstance(action, RefreshFindingComment))
         closed = sum(1 for action in actions if isinstance(action, CloseFindingComment))
         if dry_run:
@@ -35,16 +31,14 @@ class GitHubProvider:
 
         applied = 0
         for action in actions:
-            if isinstance(action, CreateFindingComment):
-                target = action.target
-                assert target is not None
+            if isinstance(action, CreateInlineFindingComment):
                 try:
                     self.client.create_review_comment(
                         pr_number=pr_id,
                         body=action.body,
                         commit_id=head_sha,
-                        path=target.path.lstrip("/"),
-                        line=target.line,
+                        path=action.target.path.lstrip("/"),
+                        line=action.target.line,
                     )
                 except Exception:
                     self.client.create_issue_comment(pr_id, action.body)
