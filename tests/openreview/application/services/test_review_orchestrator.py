@@ -1,5 +1,9 @@
+import subprocess
 from pathlib import Path
 
+import pytest
+
+from openreview.application.errors import ApplicationExecutionError
 from openreview.application.services import review_orchestrator as orchestrator
 from openreview.config import OpenReviewConfig, OpenReviewRules
 from openreview.domain.entities.diff_hunk import Hunk
@@ -24,6 +28,12 @@ class DummyChangedPathCollector:
     def collect_changed_paths(self, pr_id, repo_root, base_ref):
         self.calls.append((pr_id, repo_root, base_ref))
         return list(self.changed_paths)
+
+
+class FailingChangedPathCollector:
+    def collect_changed_paths(self, pr_id, repo_root, base_ref):
+        del pr_id, repo_root, base_ref
+        raise subprocess.CalledProcessError(1, ["git", "diff"], output="fatal: bad revision")
 
 
 def test_execute_review_uses_router_and_filters_findings(monkeypatch, tmp_path: Path) -> None:
@@ -86,3 +96,40 @@ def test_execute_review_uses_router_and_filters_findings(monkeypatch, tmp_path: 
     assert reviewer.calls[0]["files"][0].hunks == [Hunk(path="/src/a.py", start=5, end=5)]
     assert len(reviewer.calls[0]["files"]) == 1
     assert collector.calls[0][0] == 123
+
+
+def test_execute_review_wraps_changed_path_failures_as_execution_errors(tmp_path: Path) -> None:
+    config = OpenReviewConfig(rules=OpenReviewRules())
+
+    with pytest.raises(ApplicationExecutionError, match="Unable to diff against base ref 'origin/main'"):
+        orchestrator.execute_review(
+            pr_id=123,
+            repo_root=tmp_path,
+            base_ref="origin/main",
+            config=config,
+            changed_path_collector=FailingChangedPathCollector(),
+            review_model=object(),
+            max_files=10,
+        )
+
+
+def test_execute_review_wraps_hunk_mapping_failures_as_execution_errors(monkeypatch, tmp_path: Path) -> None:
+    config = OpenReviewConfig(rules=OpenReviewRules())
+    collector = DummyChangedPathCollector(["/src/a.py"])
+
+    monkeypatch.setattr(
+        orchestrator,
+        "changed_hunks",
+        lambda repo_root, base_ref: (_ for _ in ()).throw(subprocess.CalledProcessError(1, ["git", "diff"])),
+    )
+
+    with pytest.raises(ApplicationExecutionError, match="Unable to map changed hunks against 'origin/main'"):
+        orchestrator.execute_review(
+            pr_id=123,
+            repo_root=tmp_path,
+            base_ref="origin/main",
+            config=config,
+            changed_path_collector=collector,
+            review_model=object(),
+            max_files=10,
+        )

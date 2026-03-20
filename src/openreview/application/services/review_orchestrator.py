@@ -6,9 +6,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-import typer
 from rich import print
 
+from openreview.application.errors import ApplicationExecutionError
 from openreview.config import OpenReviewConfig
 from openreview.domain.entities.changed_file import ChangedFile
 from openreview.domain.entities.finding import ReviewFinding
@@ -52,7 +52,7 @@ def execute_review(
 		msg = f"Unable to diff against base ref '{base_ref}'."
 		if output:
 			msg = f"{msg} git said: {output}"
-		raise typer.BadParameter(msg) from err
+		raise ApplicationExecutionError(msg) from err
 
 	changed_paths = [
 		path for path in changed_paths if path_allowed(path, config.rules.include_paths, config.rules.exclude_paths)
@@ -60,7 +60,7 @@ def execute_review(
 	try:
 		hunks = changed_hunks(repo_root, base_ref)
 	except subprocess.CalledProcessError as err:
-		raise typer.BadParameter(f"Unable to map changed hunks against '{base_ref}'.") from err
+		raise ApplicationExecutionError(f"Unable to map changed hunks against '{base_ref}'.") from err
 
 	files = [ChangedFile(path=path, hunks=hunks.get(path, [])) for path in changed_paths[:max_files]]
 	print(f"Changed files considered: {len(files)}")

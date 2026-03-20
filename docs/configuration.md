@@ -33,6 +33,8 @@ What it does:
 - plans comment updates against the existing review state
 - optionally applies those changes
 
+If provider synchronization fails after validation, the CLI exits with a non-zero status and prints the execution error rather than reporting it as an invalid parameter.
+
 ## `openreview run`
 
 Use this command for the full review loop.
@@ -52,7 +54,7 @@ openreview run \
 What it does:
 
 - discovers changed files
-- invokes the active review agent
+- invokes the active review agent on changed excerpts built from mapped hunks with small surrounding context
 - filters and maps findings
 - synchronizes the resulting comments back to the provider
 
@@ -166,6 +168,8 @@ rules:
 - `include_paths`: optional allow-list prefixes
 - `exclude_paths`: deny-list prefixes
 - `changed_lines_only`: when true, keep only findings that map to changed hunks
+
+Even when `changed_lines_only` is enabled, the reviewer now sees diff-aware excerpts first rather than an arbitrary prefix of the full file. That improves review quality for large files where the interesting change is far from the beginning.
 
 ## Findings JSON
 

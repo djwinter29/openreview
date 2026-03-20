@@ -51,7 +51,7 @@ The `run` command performs the full workflow:
 1. load `.openreview.yml`
 2. resolve provider-specific SCM config and typed model provider config
 3. determine changed files
-4. ask the configured reviewer to inspect those files
+4. ask the configured reviewer to inspect changed excerpts built from mapped hunks with small surrounding context
 5. map findings back to changed hunks
 6. filter, deduplicate, and cap findings
 7. plan provider-neutral lifecycle actions against normalized existing comments
@@ -70,6 +70,8 @@ The `sync` command skips AI review and starts from a prepared findings JSON file
 2. resolve provider-specific SCM config
 3. plan provider-neutral lifecycle actions
 4. apply or print those actions
+
+Runtime sync failures are surfaced through the same application execution boundary used by `run`, and the CLI converts them into a non-zero exit instead of reporting them as parameter validation errors.
 
 ## Key Domain Concepts
 
@@ -109,6 +111,10 @@ The outer composition layer resolves provider-specific SCM config from environme
 ### Review model gateway
 
 Reviewers do not build raw model requests or branch on provider-specific model behavior. They receive a configured gateway that accepts a typed review request and returns structured review findings. Review requests now carry only enforced fields: path, content, and explicit reviewer instructions. Prompt construction, provider selection, API keys, model names, base URLs, JSON parsing, and response normalization stay outside the reviewer layer. Malformed model output is treated as a contract failure, not as an empty finding set, so the application layer can fail fast or choose an explicit degradation policy. The model error taxonomy also lives at the port boundary, which keeps application code dependent on `ports/model.py` rather than on adapter-defined exception types.
+
+### Reviewer input shaping
+
+Reviewer input is now diff-aware instead of file-prefix based. Before invoking the review model, the application maps changed hunks for each file and the reviewer builds request content from those changed excerpts with a small amount of surrounding context. This reduces the risk of truncating away the actual modified region in large files while preserving stable line references in the prompt.
 
 ## Extension Points
 

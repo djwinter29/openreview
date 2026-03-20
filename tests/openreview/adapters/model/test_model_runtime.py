@@ -46,6 +46,7 @@ def test_configured_review_model_gateway_builds_prompt_from_typed_request() -> N
     assert request.api_key == "secret"
     assert "File: /src/app.py" in request.prompt
     assert "Review only the changed code for practical defects." in request.prompt
+    assert "treat those prefixed numbers as the authoritative source file line numbers" in request.prompt
 
 
 def test_configured_review_model_gateway_raises_for_empty_payload() -> None:

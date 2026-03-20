@@ -28,6 +28,7 @@ def _build_review_prompt(request: ReviewRequest) -> str:
         "Return ONLY valid JSON array. "
         f"{request.instructions} "
         "Schema per item: {line:int,severity:string,confidence:number,message:string,suggestion:string}. "
+        "When code excerpts include '<line>: <code>' prefixes, treat those prefixed numbers as the authoritative source file line numbers and return them exactly in the line field. "
         "Severity must be one of: info, warning, error. confidence in [0,1].\n\n"
         f"File: {request.path}\n"
         "Code:\n"
