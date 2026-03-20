@@ -7,6 +7,7 @@ import json
 import typer
 from rich import print
 
+from openreview.application.errors import ApplicationExecutionError
 from openreview.domain.entities.finding import ReviewFinding
 from openreview.domain.entities.sync_action import sync_action_kind
 from openreview.ports.scm import SyncExecutionError, SyncExecutor, SyncSummary
@@ -78,7 +79,7 @@ def sync_with_provider(
     try:
         actions, summary = sync_executor.sync(pr_id, findings, dry_run=dry_run)
     except SyncExecutionError as err:
-        raise typer.BadParameter(str(err)) from err
+        raise ApplicationExecutionError(str(err)) from err
 
     print(f"Planned actions: {len(actions)}")
     for action in actions:

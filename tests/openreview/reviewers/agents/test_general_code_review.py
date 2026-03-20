@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from openreview.domain.entities.diff_hunk import Hunk
 from openreview.domain.entities.finding import ReviewFinding
 from openreview.ports.model import ReviewRequest, StructuredReviewFinding
 from openreview.domain.services.fingerprint_service import build_fingerprint as _fp
@@ -62,6 +63,7 @@ def test_review_changed_files_parses_items(tmp_path: Path, monkeypatch) -> None:
     assert len(review_model.requests) == 1
     assert review_model.requests[0].path == "/a.c"
     assert review_model.requests[0].content == "int main(){return 0;}"
+    assert review_model.requests[0].instructions == "Find practical issues in changed code only."
 
 
 def test_review_changed_files_skips_missing_file(tmp_path: Path, monkeypatch) -> None:
@@ -72,3 +74,23 @@ def test_review_changed_files_skips_missing_file(tmp_path: Path, monkeypatch) ->
         repo_root=tmp_path,
     )
     assert findings == []
+
+
+def test_review_changed_files_prioritizes_changed_hunks_over_file_prefix(tmp_path: Path) -> None:
+    test_file = tmp_path / "a.c"
+    lines = [f"line {i}" for i in range(1, 61)]
+    lines[49] = "important changed line"
+    test_file.write_text("\n".join(lines), encoding="utf-8")
+    review_model = DummyReviewModel()
+
+    ai_reviewer.review_changed_files(
+        review_model=review_model,
+        files=[ai_reviewer.ChangedFile(path="/a.c", hunks=[Hunk(path="/a.c", start=50, end=50)])],
+        repo_root=tmp_path,
+        max_file_chars=120,
+    )
+
+    assert len(review_model.requests) == 1
+    assert "Changed excerpt (48-52)" in review_model.requests[0].content
+    assert "50: important changed line" in review_model.requests[0].content
+    assert "1: line 1" not in review_model.requests[0].content

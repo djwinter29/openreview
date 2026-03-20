@@ -1,8 +1,8 @@
 from pathlib import Path
 
 import pytest
-import typer
 
+from openreview.application.errors import ApplicationExecutionError
 from openreview.application.commands.run_review import execute_run
 from openreview.ports.model import ReviewModelContractError
 
@@ -26,7 +26,7 @@ def test_execute_run_wraps_review_model_contract_failures(monkeypatch, tmp_path:
         lambda **kwargs: (_ for _ in ()).throw(ReviewModelContractError("malformed JSON")),
     )
 
-    with pytest.raises(typer.BadParameter, match="review model returned invalid structured output"):
+    with pytest.raises(ApplicationExecutionError, match="review model returned invalid structured output"):
         execute_run(
             pr_id=1,
             repo_root=tmp_path,

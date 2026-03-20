@@ -30,11 +30,40 @@ class ModelRateLimitError(ModelCallError):
     pass
 
 
+@dataclass(frozen=True)
+class OpenAIModelConfig:
+    """! Typed configuration for OpenAI-compatible review models."""
+
+    model: str
+    api_key: str
+    base_url: str | None = None
+
+
+@dataclass(frozen=True)
+class AnthropicModelConfig:
+    """! Typed configuration for Anthropic review models."""
+
+    model: str
+    api_key: str
+    base_url: str | None = None
+
+
+@dataclass(frozen=True)
+class DeepSeekModelConfig:
+    """! Typed configuration for DeepSeek review models."""
+
+    model: str
+    api_key: str
+    base_url: str | None = None
+
+
+ModelProviderConfig = OpenAIModelConfig | AnthropicModelConfig | DeepSeekModelConfig
+
+
 @dataclass
 class ModelRequest:
     """! Normalized request for text generation across model providers."""
 
-    provider: str
     model: str
     api_key: str
     prompt: str
@@ -71,8 +100,7 @@ class ReviewRequest:
 
     path: str
     content: str
-    instructions: str = "Find practical issues in changed code only."
-    response_schema: str = "structured_review_finding.v1"
+    instructions: str
 
 
 class ModelPort(Protocol):

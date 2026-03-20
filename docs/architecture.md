@@ -29,7 +29,7 @@ These decisions are meant to keep the current architecture moving toward stronge
   - CLI-facing commands and orchestration helpers
   - coordinates workflows such as `run` and `sync`
 - `src/openreview/bootstrap.py`
-  - outer composition layer for provider selection, model gateway wiring, and assembly of SCM services through a provider registry
+  - outer composition layer for provider selection, model gateway wiring through typed provider composition, and assembly of SCM services through a provider registry
 - `src/openreview/domain/`
   - core entities such as findings and diff hunks
   - provider-neutral business rules for filtering, fingerprinting, mapping, and sync planning
@@ -49,7 +49,7 @@ These decisions are meant to keep the current architecture moving toward stronge
 The `run` command performs the full workflow:
 
 1. load `.openreview.yml`
-2. resolve provider-specific SCM config and model credentials
+2. resolve provider-specific SCM config and typed model provider config
 3. determine changed files
 4. ask the configured reviewer to inspect those files
 5. map findings back to changed hunks
@@ -104,18 +104,18 @@ This split keeps lifecycle rules in one place while letting each provider keep o
 
 ### Composition layer
 
-The outer composition layer resolves provider-specific SCM config from environment-backed inputs, uses a single SCM provider registry to assemble the provider plus changed-path collector pair, and injects a configured review-focused model gateway used by reviewers. Application services receive these dependencies explicitly and do not instantiate concrete adapters.
+The outer composition layer resolves provider-specific SCM config from environment-backed inputs, uses a single SCM provider registry to assemble the provider plus changed-path collector pair, resolves typed model provider config once, and injects a configured review-focused model gateway used by reviewers. Application services receive these dependencies explicitly and do not instantiate concrete adapters.
 
 ### Review model gateway
 
-Reviewers do not build raw model requests or branch on provider-specific model behavior. They receive a configured gateway that accepts a typed review request and returns structured review findings. Prompt construction, response-schema wording, provider selection, API keys, model names, base URLs, JSON parsing, and response normalization stay outside the reviewer layer. Malformed model output is treated as a contract failure, not as an empty finding set, so the application layer can fail fast or choose an explicit degradation policy. The model error taxonomy also lives at the port boundary, which keeps application code dependent on `ports/model.py` rather than on adapter-defined exception types.
+Reviewers do not build raw model requests or branch on provider-specific model behavior. They receive a configured gateway that accepts a typed review request and returns structured review findings. Review requests now carry only enforced fields: path, content, and explicit reviewer instructions. Prompt construction, provider selection, API keys, model names, base URLs, JSON parsing, and response normalization stay outside the reviewer layer. Malformed model output is treated as a contract failure, not as an empty finding set, so the application layer can fail fast or choose an explicit degradation policy. The model error taxonomy also lives at the port boundary, which keeps application code dependent on `ports/model.py` rather than on adapter-defined exception types.
 
 ## Extension Points
 
 - add new SCM providers by implementing the SCM port and registering one SCM composition entry
 - add new review agents under `reviewers/agents/`
 - add new reviewer registrations by pairing metadata and factory in one registry entry
-- add new model providers under `adapters/model/`
+- add new model providers by registering one composition entry under `adapters/model/`
 - expand routing logic in `reviewers/router.py` when multiple agents become active
 
 ## Near-Term Direction
@@ -135,6 +135,7 @@ Tests are organized to mirror the production package structure wherever practica
 - root package tests for package-level modules such as `cli.py`
 - `application/services/` tests for orchestration helpers
 - `domain/services/` tests for business rules
+- `adapters/model/` tests for provider composition and gateway behavior
 - `adapters/scm/` tests for provider clients, sync logic, and exports
 
 That keeps source-to-test mapping explicit and makes stale tests easier to spot during refactors.

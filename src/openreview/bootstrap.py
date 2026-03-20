@@ -5,10 +5,10 @@ from dataclasses import dataclass
 
 import typer
 
+from openreview.adapters.model.composition import compose_review_model
 from openreview.adapters.scm.composition import compose_scm_services
-from openreview.adapters.model import ConfiguredReviewModelGateway, RuntimeModelGateway
 from openreview.adapters.scm.runtime import ProviderSyncExecutor
-from openreview.ports.model import ReviewModelGateway
+from openreview.ports.model import AnthropicModelConfig, DeepSeekModelConfig, ModelProviderConfig, OpenAIModelConfig, ReviewModelGateway
 from openreview.ports.scm import (
     AzureDevOpsScmConfig,
     ChangedPathCollector,
@@ -64,15 +64,32 @@ def resolve_scm_config(
     raise typer.BadParameter("provider must be one of: azure|github|gitlab")
 
 
-def resolve_model_api_key(provider: str, ai_api_key: str | None, openai_api_key: str | None) -> str:
-    if ai_api_key:
-        return ai_api_key
+def resolve_model_config(
+    *,
+    provider: str,
+    model: str,
+    ai_api_key: str | None,
+    openai_api_key: str | None,
+    base_url: str | None,
+) -> ModelProviderConfig:
     if provider == "openai":
-        return env_or_option(openai_api_key, "OPENAI_API_KEY")
+        return OpenAIModelConfig(
+            model=model,
+            api_key=ai_api_key or env_or_option(openai_api_key, "OPENAI_API_KEY"),
+            base_url=base_url,
+        )
     if provider in {"claude", "anthropic"}:
-        return env_or_option(None, "ANTHROPIC_API_KEY")
+        return AnthropicModelConfig(
+            model=model,
+            api_key=ai_api_key or env_or_option(None, "ANTHROPIC_API_KEY"),
+            base_url=base_url,
+        )
     if provider == "deepseek":
-        return env_or_option(None, "DEEPSEEK_API_KEY")
+        return DeepSeekModelConfig(
+            model=model,
+            api_key=ai_api_key or env_or_option(None, "DEEPSEEK_API_KEY"),
+            base_url=base_url,
+        )
     raise typer.BadParameter("ai-provider must be one of: openai|claude|deepseek")
 
 
@@ -121,17 +138,17 @@ def build_run_composition(
         gitlab_base_url=gitlab_base_url,
     )
     scm_services = compose_scm_services(scm_config)
-    api_key = resolve_model_api_key(ai_provider, ai_api_key, openai_api_key)
+    model_config = resolve_model_config(
+        provider=ai_provider,
+        model=ai_model,
+        ai_api_key=ai_api_key,
+        openai_api_key=openai_api_key,
+        base_url=ai_base_url,
+    )
     return RunComposition(
         changed_path_collector=scm_services.changed_path_collector,
         sync_executor=ProviderSyncExecutor(scm_services.review_provider),
-        review_model=ConfiguredReviewModelGateway(
-            transport=RuntimeModelGateway(),
-            provider=ai_provider,
-            model=ai_model,
-            api_key=api_key,
-            base_url=ai_base_url,
-        ),
+        review_model=compose_review_model(model_config),
     )
 
 

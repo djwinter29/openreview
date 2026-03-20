@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 
 import httpx
@@ -18,13 +19,14 @@ from openreview.ports.model import (
 )
 
 
+ModelTransportHandler = Callable[[ModelRequest], ModelResponse]
+
+
 def _build_review_prompt(request: ReviewRequest) -> str:
     return (
         "You are a strict senior code reviewer. "
         "Return ONLY valid JSON array. "
         f"{request.instructions} "
-        "Schema version: "
-        f"{request.response_schema}. "
         "Schema per item: {line:int,severity:string,confidence:number,message:string,suggestion:string}. "
         "Severity must be one of: info, warning, error. confidence in [0,1].\n\n"
         f"File: {request.path}\n"
@@ -111,7 +113,7 @@ def _raise_for_status(response: httpx.Response, provider: str) -> None:
         raise ModelCallError(f"{provider} call failed: {code}") from err
 
 
-def _openai(req: ModelRequest) -> ModelResponse:
+def openai_transport(req: ModelRequest) -> ModelResponse:
     payload = {
         "model": req.model,
         "input": req.prompt,
@@ -144,7 +146,7 @@ def _openai(req: ModelRequest) -> ModelResponse:
     )
 
 
-def _anthropic(req: ModelRequest) -> ModelResponse:
+def anthropic_transport(req: ModelRequest) -> ModelResponse:
     url = (req.base_url or "https://api.anthropic.com").rstrip("/") + "/v1/messages"
     content: list[dict[str, str]] = [{"type": "text", "text": req.prompt}]
     payload: dict = {
@@ -176,7 +178,7 @@ def _anthropic(req: ModelRequest) -> ModelResponse:
     return ModelResponse(text="\n".join(chunks).strip(), usage=usage, finish_reason=finish_reason, raw=data)
 
 
-def _deepseek(req: ModelRequest) -> ModelResponse:
+def deepseek_transport(req: ModelRequest) -> ModelResponse:
     url = (req.base_url or "https://api.deepseek.com").rstrip("/") + "/chat/completions"
     payload: dict = {
         "model": req.model,
@@ -200,19 +202,14 @@ def _deepseek(req: ModelRequest) -> ModelResponse:
 
 
 class RuntimeModelGateway(ModelPort):
+    def __init__(self, *, provider_name: str, handler: ModelTransportHandler):
+        self._provider_name = provider_name
+        self._handler = handler
+
     def generate(self, request: ModelRequest) -> ModelResponse:
-        provider = request.provider.lower().strip()
         if not request.api_key:
-            raise ModelConfigError("missing model api key")
-
-        if provider == "openai":
-            return _openai(request)
-        if provider in {"anthropic", "claude"}:
-            return _anthropic(request)
-        if provider == "deepseek":
-            return _deepseek(request)
-
-        raise ModelConfigError("model provider must be one of: openai|claude|deepseek")
+            raise ModelConfigError(f"missing model api key for {self._provider_name}")
+        return self._handler(request)
 
 
 class ConfiguredReviewModelGateway(ReviewModelGateway):
@@ -220,13 +217,11 @@ class ConfiguredReviewModelGateway(ReviewModelGateway):
         self,
         *,
         transport: ModelPort,
-        provider: str,
         model: str,
         api_key: str,
         base_url: str | None = None,
     ):
         self._transport = transport
-        self._provider = provider
         self._model = model
         self._api_key = api_key
         self._base_url = base_url
@@ -234,7 +229,6 @@ class ConfiguredReviewModelGateway(ReviewModelGateway):
     def review(self, request: ReviewRequest) -> list[StructuredReviewFinding]:
         response = self._transport.generate(
             ModelRequest(
-                provider=self._provider,
                 model=self._model,
                 api_key=self._api_key,
                 prompt=_build_review_prompt(request),
@@ -245,5 +239,5 @@ class ConfiguredReviewModelGateway(ReviewModelGateway):
         return _parse_structured_review_findings(response.text)
 
 
-def generate_text(request: ModelRequest) -> ModelResponse:
-    return RuntimeModelGateway().generate(request)
+def generate_text(request: ModelRequest, *, transport: ModelPort) -> ModelResponse:
+    return transport.generate(request)

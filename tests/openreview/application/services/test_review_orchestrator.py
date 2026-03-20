@@ -83,5 +83,6 @@ def test_execute_review_uses_router_and_filters_findings(monkeypatch, tmp_path: 
     assert result.findings[0].fingerprint == "fp-1"
     assert reviewer.calls[0]["review_model"] is not None
     assert reviewer.calls[0]["files"][0].path == "/src/a.py"
+    assert reviewer.calls[0]["files"][0].hunks == [Hunk(path="/src/a.py", start=5, end=5)]
     assert len(reviewer.calls[0]["files"]) == 1
     assert collector.calls[0][0] == 123

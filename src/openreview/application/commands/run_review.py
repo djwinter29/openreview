@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import typer
-
+from openreview.application.errors import ApplicationExecutionError
 from openreview.application.services.review_orchestrator import execute_review
 from openreview.application.services.sync_orchestrator import print_summary, sync_with_provider
 from openreview.config import load_config
@@ -52,11 +51,11 @@ def execute_run(
             max_files=max_files,
         )
     except ReviewModelContractError as err:
-        raise typer.BadParameter(f"review model returned invalid structured output: {err}") from err
+        raise ApplicationExecutionError(f"review model returned invalid structured output: {err}") from err
     except ModelRateLimitError as err:
-        raise typer.BadParameter(f"review model rate limited the request: {err}") from err
+        raise ApplicationExecutionError(f"review model rate limited the request: {err}") from err
     except (ModelConfigError, ModelCallError) as err:
-        raise typer.BadParameter(f"review model request failed: {err}") from err
+        raise ApplicationExecutionError(f"review model request failed: {err}") from err
 
     planned, summary = sync_with_provider(
         pr_id,

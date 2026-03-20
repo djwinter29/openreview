@@ -1,6 +1,7 @@
+from openreview.adapters.model import AnthropicModelConfig, DeepSeekModelConfig, OpenAIModelConfig
 from openreview.adapters.model.runtime import ConfiguredReviewModelGateway
 from openreview.adapters.scm.runtime import GitDiffChangedPathCollector, ProviderSyncExecutor
-from openreview.bootstrap import build_run_composition, build_sync_composition, resolve_scm_config
+from openreview.bootstrap import build_run_composition, build_sync_composition, resolve_model_config, resolve_scm_config
 from openreview.ports.scm import AzureDevOpsScmConfig, GitHubScmConfig, GitLabScmConfig
 
 
@@ -65,6 +66,42 @@ def test_resolve_scm_config_builds_gitlab_config() -> None:
         token="gl-token",
         base_url="https://gitlab.example/api/v4",
     )
+
+
+def test_resolve_model_config_builds_openai_config() -> None:
+    config = resolve_model_config(
+        provider="openai",
+        model="gpt-test",
+        ai_api_key="secret",
+        openai_api_key=None,
+        base_url="https://api.example/v1",
+    )
+
+    assert config == OpenAIModelConfig(model="gpt-test", api_key="secret", base_url="https://api.example/v1")
+
+
+def test_resolve_model_config_builds_anthropic_config() -> None:
+    config = resolve_model_config(
+        provider="claude",
+        model="claude-test",
+        ai_api_key="secret",
+        openai_api_key=None,
+        base_url=None,
+    )
+
+    assert config == AnthropicModelConfig(model="claude-test", api_key="secret", base_url=None)
+
+
+def test_resolve_model_config_builds_deepseek_config() -> None:
+    config = resolve_model_config(
+        provider="deepseek",
+        model="deepseek-test",
+        ai_api_key="secret",
+        openai_api_key=None,
+        base_url=None,
+    )
+
+    assert config == DeepSeekModelConfig(model="deepseek-test", api_key="secret", base_url=None)
 
 
 def test_build_run_composition_exercises_real_bootstrap_path() -> None:

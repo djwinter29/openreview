@@ -57,7 +57,12 @@ def execute_review(
 	changed_paths = [
 		path for path in changed_paths if path_allowed(path, config.rules.include_paths, config.rules.exclude_paths)
 	]
-	files = [ChangedFile(path=path) for path in changed_paths[:max_files]]
+	try:
+		hunks = changed_hunks(repo_root, base_ref)
+	except subprocess.CalledProcessError as err:
+		raise typer.BadParameter(f"Unable to map changed hunks against '{base_ref}'.") from err
+
+	files = [ChangedFile(path=path, hunks=hunks.get(path, [])) for path in changed_paths[:max_files]]
 	print(f"Changed files considered: {len(files)}")
 
 	findings: list[ReviewFinding] = []
@@ -72,11 +77,6 @@ def execute_review(
 
 	raw_findings = len(findings)
 	print(f"AI findings (raw): {raw_findings}")
-
-	try:
-		hunks = changed_hunks(repo_root, base_ref)
-	except subprocess.CalledProcessError as err:
-		raise typer.BadParameter(f"Unable to map changed hunks against '{base_ref}'.") from err
 
 	findings = apply_hunk_mapping(findings, hunks, config.rules.changed_lines_only)
 	findings = filter_findings(findings, config.rules.min_severity, config.rules.min_confidence)

@@ -1,6 +1,6 @@
 import pytest
 
-from openreview.adapters.model.runtime import ConfiguredReviewModelGateway
+from openreview.adapters.model.runtime import ConfiguredReviewModelGateway, RuntimeModelGateway, openai_transport
 from openreview.ports.model import ModelResponse, ReviewModelContractError, ReviewRequest, StructuredReviewFinding
 
 
@@ -20,7 +20,6 @@ def test_configured_review_model_gateway_builds_prompt_from_typed_request() -> N
     )
     gateway = ConfiguredReviewModelGateway(
         transport=transport,
-        provider="openai",
         model="gpt-test",
         api_key="secret",
     )
@@ -43,10 +42,8 @@ def test_configured_review_model_gateway_builds_prompt_from_typed_request() -> N
     )
     assert len(transport.requests) == 1
     request = transport.requests[0]
-    assert request.provider == "openai"
     assert request.model == "gpt-test"
     assert request.api_key == "secret"
-    assert "Schema version: structured_review_finding.v1." in request.prompt
     assert "File: /src/app.py" in request.prompt
     assert "Review only the changed code for practical defects." in request.prompt
 
@@ -55,49 +52,51 @@ def test_configured_review_model_gateway_raises_for_empty_payload() -> None:
     transport = DummyTransport("")
     gateway = ConfiguredReviewModelGateway(
         transport=transport,
-        provider="openai",
         model="gpt-test",
         api_key="secret",
     )
 
     with pytest.raises(ReviewModelContractError, match="empty body"):
-        gateway.review(ReviewRequest(path="/src/app.py", content="print('hello')"))
+        gateway.review(ReviewRequest(path="/src/app.py", content="print('hello')", instructions="Inspect changed code only."))
 
 
 def test_configured_review_model_gateway_raises_for_non_json_payload() -> None:
     transport = DummyTransport("not json")
     gateway = ConfiguredReviewModelGateway(
         transport=transport,
-        provider="openai",
         model="gpt-test",
         api_key="secret",
     )
 
     with pytest.raises(ReviewModelContractError, match="malformed JSON"):
-        gateway.review(ReviewRequest(path="/src/app.py", content="print('hello')"))
+        gateway.review(ReviewRequest(path="/src/app.py", content="print('hello')", instructions="Inspect changed code only."))
 
 
 def test_configured_review_model_gateway_raises_for_non_list_payload() -> None:
     transport = DummyTransport('{"line": 1}')
     gateway = ConfiguredReviewModelGateway(
         transport=transport,
-        provider="openai",
         model="gpt-test",
         api_key="secret",
     )
 
     with pytest.raises(ReviewModelContractError, match="expected top-level list"):
-        gateway.review(ReviewRequest(path="/src/app.py", content="print('hello')"))
+        gateway.review(ReviewRequest(path="/src/app.py", content="print('hello')", instructions="Inspect changed code only."))
 
 
 def test_configured_review_model_gateway_raises_for_invalid_list_items() -> None:
     transport = DummyTransport('["bad-item"]')
     gateway = ConfiguredReviewModelGateway(
         transport=transport,
-        provider="openai",
         model="gpt-test",
         api_key="secret",
     )
 
     with pytest.raises(ReviewModelContractError, match="expected all list items to be objects"):
-        gateway.review(ReviewRequest(path="/src/app.py", content="print('hello')"))
+        gateway.review(ReviewRequest(path="/src/app.py", content="print('hello')", instructions="Inspect changed code only."))
+
+
+def test_runtime_model_gateway_uses_bound_transport_handler() -> None:
+    gateway = RuntimeModelGateway(provider_name="openai", handler=openai_transport)
+
+    assert gateway._provider_name == "openai"

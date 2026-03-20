@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from openreview.application.errors import ApplicationExecutionError
 from openreview.application.services.sync_orchestrator import print_summary, sync_with_provider
 from openreview.domain.entities.finding import ReviewFinding
 from openreview.domain.entities.sync_action import CreateGeneralFindingComment
@@ -71,7 +72,7 @@ def test_sync_with_provider_uses_injected_executor() -> None:
 def test_sync_with_provider_wraps_sync_errors() -> None:
     executor = DummySyncExecutor(error=SyncExecutionError("plan", RuntimeError("boom")))
 
-    with pytest.raises(Exception):
+    with pytest.raises(ApplicationExecutionError, match="provider sync failed at plan"):
         sync_with_provider(
             123,
             [],

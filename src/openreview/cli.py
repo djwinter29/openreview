@@ -8,6 +8,7 @@ import typer
 from rich import print
 
 from openreview import __version__
+from openreview.application.errors import ApplicationExecutionError
 from openreview.bootstrap import build_run_composition, build_sync_composition
 from openreview.application.commands.run_review import execute_run
 from openreview.application.commands.sync_findings import execute_sync
@@ -75,13 +76,17 @@ def sync(
         gitlab_base_url=gitlab_base_url,
     )
 
-    execute_sync(
-        pr_id=pr_id,
-        findings_file=findings_file,
-        dry_run=dry_run,
-        summary_json=summary_json,
-        sync_executor=composition.sync_executor,
-    )
+    try:
+        execute_sync(
+            pr_id=pr_id,
+            findings_file=findings_file,
+            dry_run=dry_run,
+            summary_json=summary_json,
+            sync_executor=composition.sync_executor,
+        )
+    except ApplicationExecutionError as err:
+        typer.echo(str(err), err=True)
+        raise typer.Exit(code=1) from err
 
 
 @app.command()
@@ -131,18 +136,22 @@ def run(
         ai_base_url=ai_base_url,
     )
 
-    execute_run(
-        pr_id=pr_id,
-        repo_root=repo_root,
-        base_ref=base_ref,
-        config_file=config_file,
-        max_files=max_files,
-        dry_run=dry_run,
-        summary_json=summary_json,
-        changed_path_collector=composition.changed_path_collector,
-        sync_executor=composition.sync_executor,
-        review_model=composition.review_model,
-    )
+    try:
+        execute_run(
+            pr_id=pr_id,
+            repo_root=repo_root,
+            base_ref=base_ref,
+            config_file=config_file,
+            max_files=max_files,
+            dry_run=dry_run,
+            summary_json=summary_json,
+            changed_path_collector=composition.changed_path_collector,
+            sync_executor=composition.sync_executor,
+            review_model=composition.review_model,
+        )
+    except ApplicationExecutionError as err:
+        typer.echo(str(err), err=True)
+        raise typer.Exit(code=1) from err
 
 
 if __name__ == "__main__":
